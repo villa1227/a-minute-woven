@@ -1,0 +1,8 @@
+.deps/
+__pycache__/
+recordings/
+.venv/
+diagnostics/
+.env
+.env.*
+*.log
