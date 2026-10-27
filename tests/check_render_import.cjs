@@ -3,6 +3,7 @@ const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
 const {pathToFileURL} = require('node:url');
 const path = require('node:path');
+const fs = require('node:fs');
 (async () => {
   const browser = await chromium.launch({channel:'msedge',headless:true});
   try {
@@ -10,8 +11,7 @@ const path = require('node:path');
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(pathToFileURL(path.resolve(__dirname,'../web/render-artwork.html')).href);
-    const artwork = {id:'synthetic-import',renderer:'woven-v1',status:'completed',created_at:'2026-10-27T00:00:00Z',
-      bands:Array.from({length:12},(_,index)=>({index,seed:'synthetic:'+index,threads:22,base_threads:22,amplitude:{left:.16,right:.16}}))};
+    const artwork = JSON.parse(fs.readFileSync(path.resolve(__dirname,'../examples/artwork.synthetic.json'),'utf8'));
     async function load(data) {
       await page.locator('#file').setInputFiles({name:'artwork.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(data))});
     }

@@ -10,6 +10,8 @@
 
 支持作品格式 `schema_version: 1` 和 `2`，当前绘图风格 `renderer: "woven-v1"`。工具仅接受完成的 12 段作品；取消或未完成记录不会伪装成完整作品。
 
+仓库提供 [完全合成的作品参数](../examples/artwork.synthetic.json)，可直接导入试绘，包含双眼独立变化和缺失数据场景。[样例说明及重新生成方法](../examples/README.md)适用于自定义绘图验收；它不包含真实参与者记录。
+
 ### 在自己的页面中调用 Canvas 绘图
 
 引入 `web/weave.js` 后使用全局 `Weave`；Node.js 可 `require('./web/weave.js')`，但实际绘图仍需调用方提供兼容 Canvas 2D 的上下文。
