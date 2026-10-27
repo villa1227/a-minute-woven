@@ -22,6 +22,8 @@ class LiveTrace:
                 for side, eye in data['eyes'].items()}}
         elif source == 'heart_rate':
             data = {key: data.get(key) for key in ('bpm', 'quality', 'contact_detected')}
+        elif source == 'eda':
+            data = {key: data.get(key) for key in ('adc', 'quality', 'break_before', 'segment', 'stream_id')}
         else:
             data = dict(data)
         with self.lock:

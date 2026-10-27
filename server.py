@@ -16,6 +16,7 @@ from acquisition.camera import CameraWorker
 from acquisition.core import Recorder
 from acquisition.heart import HeartWorker, scan_devices
 from acquisition.live import LiveTrace
+from acquisition.eda import EdaService, list_ports
 from acquisition.artwork import ArtworkSession, valid_eye, valid_heart
 
 
@@ -25,6 +26,9 @@ class Controller:
         self.recorder = Recorder()
         self.artwork = ArtworkSession(self.recorder)
         self.trace = LiveTrace()
+        self.eda = EdaService(self.recorder, self.trace, ROOT / 'diagnostics' / 'gsr')
+        self.eda_ports = []
+        self.eda_ports_error = None
         self.camera = self.heart = None
         self.devices = []
         self.cameras = []
@@ -51,6 +55,14 @@ class Controller:
             except Exception as exc:
                 self.note = '记录写入失败，请停止记录：' + str(exc)
 
+    def enumerate_eda_ports(self):
+        try:
+            self.eda_ports = list_ports()
+            self.eda_ports_error = None
+        except Exception as exc:
+            self.eda_ports = []
+            self.eda_ports_error = '无法枚举串口，请检查 pyserial 安装：' + str(exc)
+
     def on_hr(self, sample, clock):
         self.trace.emit('heart_rate', sample, clock)
         with self.lock:
@@ -72,6 +84,7 @@ class Controller:
             camera_sample = latest[1] if latest else None
             camera_age = (now-latest[2]['host_monotonic_ns'])/1e9 if latest else None
             hr_age = (now-self.last_hr_clock['host_monotonic_ns'])/1e9 if self.last_hr_clock else None
+            eda_state = self.eda.snapshot(include_rows=False)
             with self.recorder.lock:
                 recording = self.recorder.active
                 counts = dict(self.recorder.counts) if hasattr(self.recorder, 'counts') else {}
@@ -83,6 +96,7 @@ class Controller:
                     'camera_fresh': bool(cam_alive and camera_age is not None and camera_age < 2),
                     'heart_sample': self.last_hr, 'heart_age_s': hr_age,
                     'heart_fresh': bool(hr_alive and hr_age is not None and hr_age < 5),
+                    'eda': eda_state, 'eda_ports': self.eda_ports, 'eda_ports_error': self.eda_ports_error,
                     'recording': recording, 'counts': counts, 'elapsed_s': elapsed,
                     'artwork_running': self.artwork.active,
                     'path': str(self.recorder.path) if self.recorder.path else None, 'note': self.note}
@@ -112,6 +126,24 @@ class Controller:
 
     def action(self, command, data):
         with self.lock:
+            if command == 'eda_scan':
+                self.enumerate_eda_ports()
+                return
+            if command == 'eda_connect':
+                if self.recorder.active:
+                    raise ValueError('请先结束创作或记录，再连接或更换皮电串口')
+                self.enumerate_eda_ports()
+                port = data.get('port')
+                if port not in [item['port'] for item in self.eda_ports]:
+                    raise ValueError('未找到所选串口，请连接 Arduino 后刷新串口')
+                try:
+                    self.eda.connect(port)
+                except Exception as exc:
+                    raise ValueError('皮电连接失败，请关闭 IDE 串口监视器或独立绘图窗口：' + str(exc)) from exc
+                return
+            if command == 'eda_stop':
+                self.eda.disconnect()
+                return
             if self.artwork.active and command in ('roi', 'camera_start', 'record_start', 'record_stop'):
                 raise ValueError('创作期间固定眼区与记录设置；如需调整，请先取消创作')
             if command == 'artwork_start':
@@ -177,8 +209,8 @@ class Controller:
                     self.heart.stop_event.set()
             elif command == 'record_start':
                 state = self.snapshot()
-                if not state['camera_fresh'] and not state['heart_fresh']:
-                    raise ValueError('尚无实时数据，请先打开摄像头或接收心率')
+                if not state['camera_fresh'] and not state['heart_fresh'] and not state['eda']['fresh']:
+                    raise ValueError('尚无实时数据，请先接入摄像头、心率或皮电')
                 self.recorder.start(ROOT / 'recordings', self.record_settings(state))
                 self.note = '记录中。可以添加 baseline、task_start 等阶段标记。'
             elif command == 'record_stop':
@@ -204,7 +236,11 @@ class Controller:
                 'save_sampled_frames': self.camera.save_frames if state['camera_fresh'] else False,
                 'ble_device': self.selected_device,
                 'ble_services': getattr(self.heart, 'service_info', None),
-                'active_sensors': {'camera': state['camera_fresh'], 'heart': state['heart_fresh']}}
+                'eda': {'port': state['eda']['port'], 'baudrate': 115200, 'target_hz': 20,
+                        'board': 'UNO', 'pin': 'A0', 'unit': 'ADC', 'calibrated': False,
+                        'protocol': 'GSR,1,seq,millis,adc', 'stream_id': state['eda']['stream_id']},
+                'active_sensors': {'camera': state['camera_fresh'], 'heart': state['heart_fresh'],
+                                   'eda': state['eda']['fresh']}}
 
     def _scan(self):
         try:
@@ -219,6 +255,7 @@ class Controller:
                 self.scanning = False
 
     def close(self):
+        self.eda.close()
         self.artwork.close()
         for worker in (self.camera, self.heart):
             if worker:
@@ -232,6 +269,7 @@ class Controller:
 def main():
     controller = Controller()
     controller.enumerate_cameras()
+    controller.enumerate_eda_ports()
     token = secrets.token_urlsafe(32)
 
     class Handler(BaseHTTPRequestHandler):
@@ -261,7 +299,7 @@ def main():
             if path == '/':
                 body = (ROOT / 'web' / 'index.html').read_text(encoding='utf-8').replace('__API_TOKEN__', token)
                 return self.send(200, body.encode('utf-8'), 'text/html; charset=utf-8')
-            if path in ('/feedback.js', '/weave.js', '/artwork.js'):
+            if path in ('/feedback.js', '/weave.js', '/artwork.js', '/eda.js'):
                 return self.send(200, (ROOT / 'web' / path[1:]).read_bytes(), 'text/javascript; charset=utf-8')
             if self.headers.get('X-Session-Token') != token:
                 return self.send(403, b'{}')

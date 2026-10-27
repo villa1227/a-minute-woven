@@ -44,6 +44,33 @@ const camera = (seq, t, left, right) => ({seq, t, source: 'camera', data: {eyes:
   image_left: eye(left), image_right: right === null ? eye(null, 'no_candidate') : eye(right)
 }}});
 const heart = (seq, t, bpm, contact = true) => ({seq, t, source: 'heart_rate', data: {bpm, contact_detected: contact}});
+const eda = (seq, t, adc, gap = false) => ({seq, t, source: 'eda', data: {
+  adc, quality: 'received_unvalidated', break_before: gap
+}});
+
+test('EDA reference needs 20 real points, accepts zero, expires and resets independently', async () => {
+  const rows = Array.from({length: 20}, (_, i) => eda(i + 1, 9 + i * .05, i));
+  const h = harness([
+    {stream_id: 'one', now_s: 10, cursor: 20, rows},
+    {stream_id: 'one', now_s: 10.1, cursor: 21, rows: [eda(21, 10.1, 0, true)]},
+    {stream_id: 'one', now_s: 11.2, cursor: 21, rows: []},
+    {stream_id: 'one', now_s: 11.3, cursor: 23, rows: [
+      {seq: 22, t: 11.25, source: 'event', data: {kind: 'eda_reset'}}, eda(23, 11.3, 500)]}
+  ]);
+  await tick();
+  assert.equal(h.node('liveEda').textContent, '19 ADC');
+  h.node('setReference').onclick();
+  assert.equal(h.node('deltaEda').textContent, '较参考 +9.50 ADC');
+  await h.timers.shift()();
+  assert.equal(h.node('liveEda').textContent, '0 ADC');
+  assert.equal(h.node('deltaEda').textContent, '较参考 -9.50 ADC');
+  await h.timers.shift()();
+  assert.equal(h.node('liveEda').textContent, '—');
+  await h.timers.shift()();
+  assert.equal(h.node('deltaEda').textContent, '原始 ADC · 未标定');
+  h.node('setReference').onclick();
+  assert.match(h.node('traceStatus').textContent, /采集几秒/);
+});
 
 test('reference stays within person, preserves separate eyes and clears explicitly', async () => {
   const h = harness([{stream_id: 'one', now_s: 10, cursor: 6, rows: [

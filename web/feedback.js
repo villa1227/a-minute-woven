@@ -3,13 +3,15 @@
   const channels = {
     left: {label: '画面左眼', color: '#087f8c', unit: 'px', ttl: 2, values: [], ref: null, reset: -Infinity},
     right: {label: '画面右眼', color: '#8a53a1', unit: 'px', ttl: 2, values: [], ref: null, reset: -Infinity},
-    heart: {label: '心率', color: '#c15350', unit: 'bpm', ttl: 5, values: [], ref: null, reset: -Infinity}
+    heart: {label: '心率', color: '#c15350', unit: 'bpm', ttl: 5, values: [], ref: null, reset: -Infinity},
+    eda: {label: '皮电', color: '#a37a24', unit: 'ADC', ttl: 1, values: [], ref: null, reset: -Infinity}
   };
   let cursor = 0, streamId = null, now = 0, markers = [], referenceTime = null;
   let connected = false, tooltipChart = null, tooltipX = null;
   const plots = [
     {id: 'eyeTrace', empty: 'eyeEmpty', keys: ['left', 'right'], minSpan: 2},
-    {id: 'heartTrace', empty: 'heartEmpty', keys: ['heart'], minSpan: 10}
+    {id: 'heartTrace', empty: 'heartEmpty', keys: ['heart'], minSpan: 10},
+    {id: 'edaTrace', empty: 'edaEmpty', keys: ['eda'], minSpan: 10}
   ];
   const median = values => {
     const sorted = [...values].sort((a, b) => a - b), mid = Math.floor(sorted.length / 2);
@@ -54,11 +56,17 @@
       } else if (row.source === 'heart_rate') {
         channels.heart.values.push({t: row.t, value: row.data.contact_detected !== false
           && row.data.quality !== 'contact_lost' && finite(row.data.bpm) && row.data.bpm > 0 ? row.data.bpm : null});
+      } else if (row.source === 'eda') {
+        const adc = row.data.adc;
+        channels.eda.values.push({t: row.t, breakBefore: Boolean(row.data.break_before),
+          value: row.data.quality === 'received_unvalidated' && Number.isInteger(adc)
+            && adc >= 0 && adc <= 1023 ? adc : null});
       } else if (row.source === 'marker') {
         markers.push({t: row.t, label: row.data.label});
       } else if (row.source === 'event') {
         if (row.data.kind === 'camera_reset') invalidate(['left', 'right'], row.t);
         if (row.data.kind === 'heart_reset') invalidate(['heart'], row.t);
+        if (row.data.kind === 'eda_reset') invalidate(['eda'], row.t);
         if (row.data.kind === 'camera_roi_changed') {
           invalidate(row.data.side === 'both' ? ['left', 'right']
             : [row.data.side === 'image_left' ? 'left' : 'right'], row.t);
@@ -71,16 +79,16 @@
     markers = markers.filter(marker => marker.t >= now - 180);
   }
   function readouts() {
-    for (const [key, suffix] of [['left', 'Left'], ['right', 'Right'], ['heart', 'Heart']]) {
+    for (const [key, suffix] of [['left', 'Left'], ['right', 'Right'], ['heart', 'Heart'], ['eda', 'Eda']]) {
       const channel = channels[key], point = current(channel);
-      $('live' + suffix).textContent = point ? point.value.toFixed(key === 'heart' ? 0 : 2) + ' ' + channel.unit : '—';
+      $('live' + suffix).textContent = point ? point.value.toFixed(['heart', 'eda'].includes(key) ? 0 : 2) + ' ' + channel.unit : '—';
       if (!point) {
         $('delta' + suffix).textContent = channel.values.length ? '暂无有效更新' : '等待数据';
       } else if (finite(channel.ref)) {
         const delta = point.value - channel.ref;
         $('delta' + suffix).textContent = '较参考 ' + (delta >= 0 ? '+' : '') + delta.toFixed(key === 'heart' ? 1 : 2) + ' ' + channel.unit;
       } else {
-        $('delta' + suffix).textContent = key === 'heart' ? '实时接收' : '候选测量';
+        $('delta' + suffix).textContent = key === 'eda' ? '原始 ADC · 未标定' : key === 'heart' ? '实时接收' : '候选测量';
       }
     }
     const refs = Object.values(channels).filter(channel => finite(channel.ref));
@@ -94,10 +102,11 @@
       return points.length ? channels[key].label + ' ' + Math.round(100 * points.filter(point => finite(point.value)).length / points.length) + '%' : null;
     }).filter(Boolean);
     $('traceStatus').textContent = connected
-      ? (recent.length ? '候选数据：' + recent.join(' / ') : '等待传感器数据')
+      ? (recent.length ? '候选数据：' + recent.join(' / ') : current(channels.eda) ? '皮电实时接收中' : '等待传感器数据')
       : '正在重连';
     $('eyeAxisUnit').textContent = relative() ? 'Δ px' : 'px';
     $('heartAxisUnit').textContent = relative() ? 'Δ bpm' : 'bpm';
+    $('edaAxisUnit').textContent = relative() ? 'Δ ADC' : 'ADC';
   }
   function draw(plot) {
     const canvas = $(plot.id), bounds = canvas.getBoundingClientRect();
@@ -149,7 +158,7 @@
         if (point.t < start) continue;
         const value = valueOf(channel, point.value);
         if (!finite(value)) {previous = null; continue;}
-        if (previous && point.t - previous.t <= channel.ttl) ctx.lineTo(x(point.t), y(value));
+        if (previous && !point.breakBefore && point.t - previous.t < channel.ttl) ctx.lineTo(x(point.t), y(value));
         else {
           ctx.moveTo(x(point.t), y(value));
           ctx.fillRect(x(point.t) - 1, y(value) - 1, 2, 2);
@@ -164,17 +173,17 @@
     }
     ctx.restore();
     const unset = relative() && plot.keys.every(key => !finite(channels[key].ref));
-    $(plot.empty).textContent = unset ? '请先设置此通道的参考值' : (plot.id === 'eyeTrace' ? '等待有效眼区数据' : '等待心率广播');
+    $(plot.empty).textContent = unset ? '请先设置此通道的参考值' : (plot.id === 'eyeTrace' ? '等待有效眼区数据' : plot.id === 'edaTrace' ? '等待皮电串口数据' : '等待心率广播');
     $(plot.empty).hidden = visible.length > 0;
-    canvas.setAttribute('aria-label', (plot.id === 'eyeTrace' ? '双眼候选直径' : '心率') + '，最近 ' + windowSize() + ' 秒，' + (visible.length ? '已显示真实采样曲线' : '暂无有效数据'));
+    canvas.setAttribute('aria-label', (plot.id === 'eyeTrace' ? '双眼候选直径' : plot.id === 'edaTrace' ? '皮电 ADC' : '心率') + '，最近 ' + windowSize() + ' 秒，' + (visible.length ? '已显示真实采样曲线' : '暂无有效数据'));
   }
   function render() {readouts(); plots.forEach(draw);}
   $('setReference').onclick = () => {
     const captured = [];
     for (const channel of Object.values(channels)) {
       channel.ref = null;
-      const points = channel.values.filter(point => point.t >= Math.max(now - 10, channel.reset) && finite(point.value));
-      if (current(channel) && points.length >= (channel.unit === 'bpm' ? 2 : 3)) {
+      const points = channel.values.filter(point => point.t >= Math.max(now - (channel.unit === 'ADC' ? 5 : 10), channel.reset) && finite(point.value));
+      if (current(channel) && points.length >= (channel.unit === 'ADC' ? 20 : channel.unit === 'bpm' ? 2 : 3)) {
         channel.ref = median(points.map(point => point.value)); captured.push(channel.label);
       }
     }
@@ -225,7 +234,7 @@
       connected = true;
     } catch (_) {connected = false;}
     render();
-    setTimeout(pollTrace, 500);
+    setTimeout(pollTrace, 200);
   }
   pollTrace();
 })();

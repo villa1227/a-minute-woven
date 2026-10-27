@@ -61,7 +61,7 @@ class Recorder:
             self.seq += 1
             self.counts[source] += 1
             # CSV is a convenience view. JSONL retains nested/raw values.
-            if source in ("camera", "heart_rate"):
+            if source in ("camera", "heart_rate", "eda"):
                 flat = {k: row[k] for k in ("seq", "host_monotonic_ns", "host_utc", "session_s")}
                 flat.update({k: json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v
                              for k, v in data.items()})
