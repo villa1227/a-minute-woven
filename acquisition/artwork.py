@@ -28,6 +28,7 @@ class ArtworkSession:
     duration_s = 60
     interval_s = 5
     band_count = 12
+    display_duration_s = 65
     # A neutral warp is always present so every participant gets a complete
     # composition, even when no sensor channel yields a valid sample.
     base_threads = 22
@@ -58,8 +59,10 @@ class ArtworkSession:
             if self.status == 'running' or self.recorder.active:
                 raise ValueError('已有创作或记录正在进行，请先结束')
             path = self.recorder.start(root, {**settings, 'artwork': {
-                'renderer': 'woven-v1', 'duration_s': 60, 'interval_s': 5}})
+                'renderer': 'woven-v1', 'duration_s': 60, 'interval_s': 5,
+                'preparation_s': 5, 'display_duration_s': 65}})
             self.origin = self.recorder.origin
+            self.recorder.deadline_ns = self.origin + 60_000_000_000
             self.path = path / 'artwork.json'
             self.artwork_id = uuid.uuid4().hex[:12]
             try:
@@ -141,26 +144,25 @@ class ArtworkSession:
         self.buckets[index] = {key: [] for key in bucket}
 
     def _preview_band(self):
-        if self.status != 'running' or len(self.bands) >= self.band_count:
-            return None
-        band = self._band_parameters(len(self.bands), self.buckets[len(self.bands)], update_reference=False)
-        band['preview'] = True
-        return band
+        # Only finalized medians are published. Animation reveals those bands.
+        return None
 
     def tick(self, now_ns=None, expected_id=None):
         with self.recorder.lock, self.lock:
             if self.status != 'running' or expected_id and expected_id != self.artwork_id:
                 return
             elapsed_ns = max(0, (self.clock() if now_ns is None else now_ns) - self.origin)
-            self.elapsed_s = min(60, elapsed_ns / 1e9)
+            self.elapsed_s = min(65, elapsed_ns / 1e9)
             target = min(12, elapsed_ns // 5_000_000_000)
             changed = target > len(self.bands)
             while len(self.bands) < target:
                 self._finalize_band(len(self.bands))
             if target == 12:
                 self.recorder.stop()
+            if elapsed_ns >= 65_000_000_000:
                 self.status = 'completed'
                 self.stop_event.set()
+                changed = True
             if changed:
                 self._save()
 
@@ -186,7 +188,7 @@ class ArtworkSession:
         with self.recorder.lock, self.lock:
             if self.status != 'running':
                 raise ValueError('当前没有进行中的创作')
-            self.elapsed_s = min(60, max(0, (self.clock() - self.origin) / 1e9))
+            self.elapsed_s = min(65, max(0, (self.clock() - self.origin) / 1e9))
             self.status = 'cancelled'
             self.stop_event.set()
             try:
@@ -198,10 +200,12 @@ class ArtworkSession:
         with self.lock:
             elapsed = self.elapsed_s
             if self.status == 'running':
-                elapsed = min(60, max(0, (self.clock() - self.origin) / 1e9))
-            data = {'schema_version': 1, 'renderer': 'woven-v1',
+                elapsed = min(65, max(0, (self.clock() - self.origin) / 1e9))
+            phase = ('preparing' if elapsed < 5 else 'weaving' if elapsed < 60 else 'finishing') if self.active else self.status
+            data = {'schema_version': 2, 'renderer': 'woven-v1',
                 'id': self.artwork_id, 'status': self.status, 'created_at': getattr(self, 'created_at', None),
                 'duration_s': 60, 'interval_s': 5, 'band_count': 12, 'elapsed_s': elapsed,
+                'preparation_s': 5, 'display_duration_s': 65, 'phase': phase,
                 'bands': self.bands, 'references': getattr(self, 'references', {}),
                 'late_samples': getattr(self, 'late_samples', 0), 'error': self.error,
                 'canvas': {'width': 2400, 'height': 3200, 'qr_space': [1920, 2760, 320, 320]},

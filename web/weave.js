@@ -67,7 +67,11 @@
     }
     ctx.restore();
   }
-  function draw(ctx, artwork, width = WIDTH, height = HEIGHT) {
+  function fraction(artwork, index, elapsed) {
+    if ((artwork.schema_version || 1) < 2 || artwork.status === 'completed') return 1;
+    return Math.max(0, Math.min(1, (elapsed - (artwork.preparation_s || 5) - index * 5) / 5));
+  }
+  function draw(ctx, artwork, width = WIDTH, height = HEIGHT, elapsed = artwork.elapsed_s || 0) {
     ctx.save(); ctx.scale(width / WIDTH, height / HEIGHT);
     ctx.fillStyle = PAPER; ctx.fillRect(0, 0, WIDTH, HEIGHT);
     const rand = random((artwork.id || 'blank') + ':paper');
@@ -76,10 +80,15 @@
       ctx.fillRect(rand() * WIDTH, rand() * HEIGHT, .6 + rand() * 1.4, .5 + rand() * 1.5);
     }
     ctx.globalAlpha = 1;
-    for (const band of artwork.bands || []) drawBand(ctx, band);
+    for (const band of artwork.bands || []) {
+      const progress = fraction(artwork, band.index, elapsed);
+      if (!progress) continue;
+      ctx.save(); ctx.beginPath(); ctx.rect(160, 150 + band.index * 210, 2080 * progress, 210); ctx.clip();
+      drawBand(ctx, band); ctx.restore();
+    }
     // The unfinished passage is redrawn from the latest real samples. It is
     // committed to the final 5-second band list only at the boundary.
-    if (artwork.preview) drawBand(ctx, artwork.preview);
+    if ((artwork.schema_version || 1) < 2 && artwork.preview) drawBand(ctx, artwork.preview);
     // Reserved square is genuinely blank, including the paper grain.
     ctx.fillStyle = PAPER; ctx.fillRect(QR.x, QR.y, QR.size, QR.size);
     if (artwork.id) {
@@ -91,7 +100,49 @@
     }
     ctx.restore();
   }
-  const api = Object.freeze({draw, drawBand, random, WIDTH, HEIGHT, PAPER, QR});
+  // Cache paper and per-band rasterization; animation only changes a clip.
+  function createAnimator(canvas, makeCanvas = () => document.createElement('canvas')) {
+    let identity = '', paper, bands = new Map();
+    function layer() {
+      const c = makeCanvas(); c.width = canvas.width; c.height = canvas.height; return c;
+    }
+    return (artwork, elapsed) => {
+      const key = [artwork.id, artwork.created_at, canvas.width, canvas.height].join(':');
+      if (key !== identity) {
+        identity = key; bands.clear(); paper = layer();
+        draw(paper.getContext('2d'), {...artwork, bands: [], preview: null}, canvas.width, canvas.height);
+      }
+      const ctx = canvas.getContext('2d'), sx = canvas.width / WIDTH, sy = canvas.height / HEIGHT;
+      ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(paper, 0, 0);
+      for (const band of artwork.bands || []) {
+        if (!bands.has(band.index)) {
+          const c = layer(), cc = c.getContext('2d'); cc.scale(sx, sy); drawBand(cc, band); bands.set(band.index, c);
+        }
+        const progress = fraction(artwork, band.index, elapsed);
+        if (!progress) continue;
+        ctx.save(); ctx.beginPath(); ctx.rect(160 * sx, (150 + band.index * 210) * sy, 2080 * sx * progress, 210 * sy); ctx.clip();
+        ctx.drawImage(bands.get(band.index), 0, 0); ctx.restore();
+      }
+    };
+  }
+  function validateArtwork(artwork) {
+    if (!artwork || typeof artwork !== 'object' || ![1,2].includes(artwork.schema_version || 1)) throw Error('不支持的作品格式版本');
+    if (artwork.renderer !== 'woven-v1') throw Error('此页面只支持 woven-v1 绘制器');
+    if (artwork.status !== 'completed') throw Error('请选择已完成作品的 artwork.json');
+    if (typeof artwork.id !== 'string' || !artwork.id || artwork.id.length > 128) throw Error('作品编号无效');
+    if (artwork.created_at !== undefined && typeof artwork.created_at !== 'string') throw Error('作品日期无效');
+    if (!Array.isArray(artwork.bands) || artwork.bands.length !== 12) throw Error('完整作品需要 12 段');
+    for (let i=0;i<12;i++) {
+      const band = artwork.bands[i];
+      if (!band || band.index !== i || typeof band.seed !== 'string' || band.seed.length > 256) throw Error('时间段编号或种子无效');
+      if (!Number.isInteger(band.threads) || band.threads < 1 || band.threads > 100 ||
+          (band.base_threads !== undefined && (!Number.isInteger(band.base_threads) || band.base_threads < 1 || band.base_threads > 100))) throw Error('线条数量无效');
+      if (!band.amplitude || !['left','right'].every(side => band.amplitude[side] === null ||
+          (Number.isFinite(band.amplitude[side]) && band.amplitude[side] >= 0 && band.amplitude[side] <= .5))) throw Error('线条幅度无效');
+    }
+    return artwork;
+  }
+  const api = Object.freeze({draw, drawBand, fraction, createAnimator, validateArtwork, random, WIDTH, HEIGHT, PAPER, QR});
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Weave = api;
 })(typeof globalThis === 'undefined' ? this : globalThis);

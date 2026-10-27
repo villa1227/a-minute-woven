@@ -1,27 +1,30 @@
 (() => {
   const canvas = $('artCanvas'), ctx = canvas.getContext('2d');
-  let artwork = {status: 'idle', bands: []}, renderKey = '', inFlight = false, exporting = false;
+  let artwork = {status: 'idle', bands: []}, inFlight = false, exporting = false;
+  let receivedAt = performance.now(), connected = false;
+  const animate = Weave.createAnimator(canvas);
+  const elapsedNow = () => Math.min(artwork.display_duration_s || 60,
+    (artwork.elapsed_s || 0) + (live() && connected ? (performance.now() - receivedAt) / 1000 : 0));
   const start = $('artStart'), cancel = $('artCancel'), download = $('artDownload');
   const live = () => artwork.status === 'running';
   function render() {
-    const key = JSON.stringify([artwork.id, artwork.bands, artwork.preview]);
-    if (key !== renderKey) {
-      renderKey = key;
-      Weave.draw(ctx, artwork, canvas.width, canvas.height);
-    }
+    const elapsed = elapsedNow(), duration = artwork.display_duration_s || 60;
+    animate(artwork, elapsed);
     start.disabled = inFlight || live() || Boolean(state?.recording);
     start.textContent = artwork.id && !live() ? '再织一幅' : '开始创作';
     cancel.hidden = !live(); cancel.disabled = inFlight;
     download.hidden = !artwork.downloadable; download.disabled = exporting;
-    const elapsed = Math.min(60, Math.max(0, artwork.elapsed_s || 0));
+    $('artProgress').max = duration;
     $('artProgress').value = elapsed;
-    $('artTime').textContent = live() ? Math.ceil(60 - elapsed) + ' 秒' : '60 秒';
-    $('artBands').textContent = artwork.bands.length + ' / 12';
+    $('artTime').textContent = live() ? Math.ceil(duration - elapsed) + ' 秒' : duration + ' 秒';
+    const completed = artwork.bands.filter(b => Weave.fraction(artwork, b.index, elapsed) >= 1).length;
+    $('artBands').textContent = completed + ' / 12';
     $('artHint').hidden = artwork.status !== 'idle';
-    $('artCanvas').setAttribute('aria-label', '数据织锦，已完成 ' + artwork.bands.length + ' 段，共 12 段');
+    $('artCanvas').setAttribute('aria-label', '数据织锦，已完成 ' + completed + ' 段，共 12 段');
     const messages = {
       idle: '准备好后，留下一分钟。',
-      running: artwork.bands.length ? '织纹正在生长。已完成的部分将留在画面上。' : '正在收集第一段纹理，5 秒后落下第一笔。',
+      running: elapsed < 5 ? '准备中 · 采集第一段数据，' + Math.ceil(5 - elapsed) + ' 秒后开始织纹。'
+        : elapsed >= 60 ? '采集已结束，正在织完最后一段。' : '织纹正从左向右生长，同时采集下一段。',
       completed: '这一分钟，已经织成。',
       cancelled: '本次创作已取消，原始记录已保留。',
       error: artwork.error || '创作中断，请检查设备与记录状态。'
@@ -34,7 +37,7 @@
   async function refresh() {
     const response = await fetch('/api/artwork', {headers: {'X-Session-Token': token}});
     if (!response.ok) throw Error(response.status === 403 ? '服务已重启，请刷新页面。' : '暂时无法获取作品，请稍后重试。');
-    artwork = await response.json(); render();
+    artwork = await response.json(); receivedAt = performance.now(); connected = true; render();
   }
   async function command(name) {
     if (inFlight) return;
@@ -71,8 +74,10 @@
   };
   async function pollArtwork() {
     try {await refresh(); $('artConnection').textContent = '';}
-    catch (error) {$('artConnection').textContent = error.message; start.disabled = true;}
+    catch (error) {connected = false; $('artConnection').textContent = error.message; start.disabled = true;}
     setTimeout(pollArtwork, 500);
   }
-  render(); pollArtwork();
+  function frame() {if (!document.hidden && live()) render(); requestAnimationFrame(frame);}
+  document.addEventListener('visibilitychange', () => {if (!document.hidden) refresh().catch(() => {connected = false;});});
+  render(); pollArtwork(); requestAnimationFrame(frame);
 })();

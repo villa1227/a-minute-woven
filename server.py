@@ -78,9 +78,13 @@ class Controller:
             cam_alive = bool(self.camera and self.camera.is_alive())
             hr_alive = bool(self.heart and self.heart.is_alive())
             latest = None
+            camera_metrics = {}
             if self.camera:
                 with self.camera.lock:
                     latest = self.camera.latest
+                    camera_metrics = dict(self.camera.metrics)
+                    if self.camera.raw:
+                        camera_metrics['preview_age_ms'] = (now-self.camera.raw[2]['host_monotonic_ns'])/1e6
             camera_sample = latest[1] if latest else None
             camera_age = (now-latest[2]['host_monotonic_ns'])/1e9 if latest else None
             hr_age = (now-self.last_hr_clock['host_monotonic_ns'])/1e9 if self.last_hr_clock else None
@@ -93,6 +97,7 @@ class Controller:
                     'devices': [info for _, info in self.devices], 'scanning': self.scanning,
                     'camera_alive': cam_alive, 'heart_alive': hr_alive,
                     'camera_sample': camera_sample, 'camera_age_s': camera_age,
+                    'camera_metrics': camera_metrics,
                     'camera_fresh': bool(cam_alive and camera_age is not None and camera_age < 2),
                     'heart_sample': self.last_hr, 'heart_age_s': hr_age,
                     'heart_fresh': bool(hr_alive and hr_age is not None and hr_age < 5),
@@ -105,24 +110,7 @@ class Controller:
         worker = self.camera
         if not worker:
             return None
-        with worker.lock:
-            latest = worker.latest
-        if not latest:
-            return None
-        frame, sample, _ = latest
-        frame = frame.copy()
-        for side, eye in sample['eyes'].items():
-            color = (0, 210, 255) if side == 'image_left' else (255, 190, 70)
-            if eye['roi']:
-                x, y, w, h = eye['roi']
-                cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
-                cv2.putText(frame, 'IMG-L' if side == 'image_left' else 'IMG-R', (x, max(18, y-5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-            if eye['candidate_center_px']:
-                center = tuple(round(v) for v in eye['candidate_center_px'])
-                a, b, angle = eye['candidate_ellipse_px']
-                cv2.ellipse(frame, center, (max(1, round(a/2)), max(1, round(b/2))), angle, 0, 360, (70, 255, 70), 1)
-        ok, data = cv2.imencode('.jpg', frame)
-        return data.tobytes() if ok else None
+        return worker.preview_jpeg()
 
     def action(self, command, data):
         with self.lock:
@@ -130,7 +118,7 @@ class Controller:
                 self.enumerate_eda_ports()
                 return
             if command == 'eda_connect':
-                if self.recorder.active:
+                if self.recorder.active or self.artwork.active:
                     raise ValueError('请先结束创作或记录，再连接或更换皮电串口')
                 self.enumerate_eda_ports()
                 port = data.get('port')
@@ -149,7 +137,7 @@ class Controller:
             if command == 'artwork_start':
                 state = self.snapshot()
                 self.artwork.start(ROOT / 'recordings', self.record_settings(state))
-                self.note = '60 秒创作已开始，系统将自动结束并保存记录'
+                self.note = '先准备 5 秒，采集 60 秒并逐段织纹，约 65 秒完成'
             elif command == 'artwork_cancel':
                 self.artwork.cancel()
                 self.note = '已取消创作，原始记录已保留'
@@ -158,7 +146,7 @@ class Controller:
                     raise ValueError('请先停止记录，再更换摄像头设置')
                 if self.camera and self.camera.is_alive():
                     raise ValueError('摄像头已打开，请先关闭')
-                index, rate = int(data.get('index', 1)), float(data.get('rate', 10))
+                index, rate = int(data.get('index', 1)), float(data.get('rate', 20))
                 if index < 0 or not 1 <= rate <= 60:
                     raise ValueError('摄像头编号须为非负整数，采样率为 1–60 Hz')
                 self.trace.emit('event', {'kind': 'camera_reset'})
@@ -299,7 +287,9 @@ def main():
             if path == '/':
                 body = (ROOT / 'web' / 'index.html').read_text(encoding='utf-8').replace('__API_TOKEN__', token)
                 return self.send(200, body.encode('utf-8'), 'text/html; charset=utf-8')
-            if path in ('/feedback.js', '/weave.js', '/artwork.js', '/eda.js'):
+            if path == '/render-artwork.html':
+                return self.send(200, (ROOT / 'web' / 'render-artwork.html').read_bytes(), 'text/html; charset=utf-8')
+            if path in ('/feedback.js', '/weave.js', '/artwork.js', '/eda.js', '/camera-preview.js', '/render-artwork.js'):
                 return self.send(200, (ROOT / 'web' / path[1:]).read_bytes(), 'text/javascript; charset=utf-8')
             if self.headers.get('X-Session-Token') != token:
                 return self.send(403, b'{}')

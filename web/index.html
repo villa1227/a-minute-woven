@@ -13,12 +13,12 @@
 <main>
 <header><div><div class="eyebrow">A MINUTE, WOVEN</div><h1>一刻织锦</h1><p>让这一分钟，慢慢织成一幅画。</p></div><div class="edition">靛蓝 · 朱红<br>60 SECONDS / 12 PASSAGES</div></header>
 <section class="artwork" aria-label="数据织锦创作">
-<div class="art-paper"><canvas id="artCanvas" width="720" height="960" role="img" aria-label="等待生成数据织锦"></canvas><div class="art-hint" id="artHint"><span>你的目光与心跳，<br>将留在这里。</span><small>每五秒定格一段，过程随采样实时生长。</small></div></div>
+<div class="art-paper"><canvas id="artCanvas" width="720" height="960" role="img" aria-label="等待生成数据织锦"></canvas><div class="art-hint" id="artHint"><span>你的目光与心跳，<br>将留在这里。</span><small>先准备五秒，再让织纹徐徐生长。</small></div></div>
 <div class="art-controls"><div class="art-intro"><span class="eyebrow">个人生成作品 / NO. 01</span><h2>把时间织进去。</h2><p>目光成为两色丝线，心率留下纹理的疏密。<br>无需刻意表现，只需停留片刻。</p></div>
 <div class="art-measures"><span>剩余时间<strong id="artTime">60 秒</strong></span><span>完成织纹<strong id="artBands">0 / 12</strong></span></div><progress id="artProgress" value="0" max="60" aria-label="创作进度"></progress>
 <div class="art-buttons"><button class="primary" id="artStart">开始创作</button><button id="artCancel" hidden>取消创作</button><button class="primary" id="artDownload" hidden>下载作品 · PNG</button></div>
 <p id="artStatus" role="status">准备好后，留下一分钟。</p><p id="artConnection" role="status"></p><div class="error" id="artError" role="alert"></div>
-<div class="art-note">开始前，在下方接入摄像头或手环。<br>完成后可下载高清作品，保存在本机。</div></div></section>
+<div class="art-note">采集一分钟，约 65 秒完成织纹。<br>完成后可下载高清作品，保存在本机。</div></div></section>
 <details id="devicePanel"><summary>设备与数据<span>摄像头、手环、皮电与原始记录</span></summary><div class="device-content">
 <style>.feedback-readouts{grid-template-columns:repeat(4,minmax(0,1fr))}.swatch.eda{background:#a37a24}@media(max-width:640px){.feedback-readouts{grid-template-columns:repeat(2,minmax(0,1fr))}}</style>
 <section class="feedback" aria-labelledby="feedbackTitle">
@@ -31,7 +31,8 @@
 <div id="traceTooltip" class="trace-tooltip" hidden></div>
 </section>
 <div class="grid"><section><div class="card"><h2><span>01</span>摄像头与眼区</h2>
-<div class="controls"><select id="camera" aria-label="摄像头"><option value="1">1 · HD webcam</option></select><label>采样 <input id="rate" type="number" value="10" min="1" max="60"> Hz</label><button class="primary" id="camStart">打开</button><button id="camStop">关闭</button></div>
+<div class="controls"><select id="camera" aria-label="摄像头"><option value="1">1 · HD webcam</option></select><label>识别 <input id="rate" type="number" value="20" min="1" max="60"> Hz</label><button class="primary" id="camStart">打开</button><button id="camStop">关闭</button></div>
+<div class="status" id="cameraPerformance">等待摄像头性能统计</div>
 <div class="controls"><label><input type="checkbox" id="saveFrames">记录时保存采样原图（JPEG）</label></div>
 <div class="controls"><label>框选眼区 <select id="eyeSide" aria-label="框选眼区"><option value="image_left">画面左侧 · IMG-L</option><option value="image_right">画面右侧 · IMG-R</option></select></label><button id="autoSide">此侧自动</button><button id="autoRoi">双眼自动</button></div>
 <div class="preview" id="preview"><div class="empty" id="empty">打开 HD webcam 后<br>选择画面左/右眼区，再拖动框选对应眼睛</div><img id="frame" hidden alt="摄像头实时预览" draggable="false"><div class="selection" id="selection"></div></div>
@@ -55,9 +56,9 @@ async function update(){const r=await fetch('/api/state',{headers:{'X-Session-To
  if(state.heart_sample){$('rr').textContent=(state.heart_fresh?'':'心率已停止更新 / 过期。')+(state.heart_sample.rr_present?'本报文 RR：'+state.heart_sample.rr_ms.map(v=>v.toFixed(1)).join(', ')+' ms；需另行验证逐搏质量。':'本报文未提供 RR 间期，不能用此心率广播计算 HRV。')}
  const s=state.camera_sample;for(const [side,suffix,label] of [['image_left','Left','画面左侧'],['image_right','Right','画面右侧']]){const eye=s?.eyes?.[side];$('diameter'+suffix).textContent=state.camera_fresh&&eye?.candidate_diameter_px!=null?eye.candidate_diameter_px.toFixed(2):'—';$('quality'+suffix).textContent=label+'：'+(eye?(qualityNames[eye.quality]||eye.quality)+' · '+(eye.roi_mode==='manual'?'手动眼区':'自动眼区'):'等待画面')+(s&&!state.camera_fresh?' · 画面已停止更新 / 过期':'')}$('cameraRate').textContent=state.camera_fresh&&s.observed_interval_ms?(1000/s.observed_interval_ms).toFixed(1):'—';
  $('record').textContent=state.recording?'停止并保存':'开始记录';$('record').disabled=state.artwork_running;for(const id of ['eyeSide','autoSide','autoRoi'])$(id).disabled=state.artwork_running;$('addMarker').disabled=!state.recording;$('elapsed').textContent=state.recording?state.elapsed_s.toFixed(1)+' 秒':'';$('recordStatus').textContent=state.note;$('counts').textContent='记录数：画面 '+(state.counts.camera||0)+' / 心率 '+(state.counts.heart_rate||0)+' / 皮电 '+(state.counts.eda||0)+' / 标记 '+(state.counts.marker||0);$('path').textContent=state.path||'保存至项目 recordings 文件夹';
- if(state.camera_alive&&state.camera_sample){const f=await fetch('/api/frame',{headers:{'X-Session-Token':token}});if(f.ok&&f.status!==204){const blob=await f.blob();const next=URL.createObjectURL(blob);$('frame').src=next;$('frame').hidden=false;$('empty').hidden=true;if(frameURL)URL.revokeObjectURL(frameURL);frameURL=next}}}
+ }
 async function poll(){if(busy)return;busy=true;try{await update()}catch(e){$('error').textContent=e.message}finally{busy=false;setTimeout(poll,400)}}poll();
 const preview=$('preview'),selection=$('selection');function point(e){const r=$('frame').getBoundingClientRect(),pr=preview.getBoundingClientRect();return{x:Math.max(0,Math.min(r.width,e.clientX-r.left)),y:Math.max(0,Math.min(r.height,e.clientY-r.top)),w:r.width,h:r.height,ox:r.left-pr.left,oy:r.top-pr.top}}
 preview.onpointerdown=e=>{if(!state?.camera_fresh||state.artwork_running)return;const p=point(e);if(!p.w||!p.h)return;drag={...p,side:$('eyeSide').value,fw:state.camera_sample.frame_width,fh:state.camera_sample.frame_height};preview.setPointerCapture(e.pointerId);selection.style.display='block';selection.style.left=(drag.x+drag.ox)+'px';selection.style.top=(drag.y+drag.oy)+'px';selection.style.width='0';selection.style.height='0'};preview.onpointermove=e=>{if(!drag)return;const p=point(e);selection.style.left=(Math.min(drag.x,p.x)+p.ox)+'px';selection.style.top=(Math.min(drag.y,p.y)+p.oy)+'px';selection.style.width=Math.abs(drag.x-p.x)+'px';selection.style.height=Math.abs(drag.y-p.y)+'px'};preview.onpointerup=e=>{if(!drag)return;const p=point(e);const roi=[Math.min(drag.x,p.x)/p.w*drag.fw,Math.min(drag.y,p.y)/p.h*drag.fh,Math.abs(drag.x-p.x)/p.w*drag.fw,Math.abs(drag.y-p.y)/p.h*drag.fh].map(Math.round),side=drag.side;drag=null;selection.style.display='none';api('roi',{roi,side})};preview.onpointercancel=()=>{drag=null;selection.style.display='none'};
 </script>
-<script src="/eda.js"></script><script src="/feedback.js"></script><script src="/weave.js"></script><script src="/artwork.js"></script></html>
+<script src="/eda.js"></script><script src="/camera-preview.js"></script><script src="/feedback.js"></script><script src="/weave.js"></script><script src="/artwork.js"></script></html>

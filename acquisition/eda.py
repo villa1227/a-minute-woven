@@ -1,11 +1,13 @@
 """Bridge the verified GSR serial service into the shared recorder and trace."""
 from skin_sigma.gsr import GsrService, list_ports
+from .interfaces import SamplePublisher
 
 
 class EdaService(GsrService):
     def __init__(self, recorder, trace, root, **kwargs):
         self.recorder = recorder
         self.trace = trace
+        self.publisher = SamplePublisher(recorder, trace)
         self.record_error = None
         super().__init__(root, on_row=self._publish, **kwargs)
 
@@ -29,9 +31,8 @@ class EdaService(GsrService):
                     'event_type': row['kind'], 'message': message,
                     'segment': row['segment'], 'port': self.port,
                     'raw': row.get('raw'), 'raw_hex': row.get('raw_hex')}
-        self.trace.emit(source, data, clock)
         try:
-            self.recorder.emit(source, data, clock)
+            self.publisher.publish(source, data, clock)
             self.record_error = None
         except Exception as exc:
             self.record_error = '皮电记录写入失败：' + str(exc)

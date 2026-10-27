@@ -30,6 +30,7 @@ class Recorder:
             self.path = Path(root) / (now + "_" + uuid.uuid4().hex[:6])
             self.path.mkdir(parents=True)
             self.origin = time.monotonic_ns()
+            self.deadline_ns = None
             self.counts = Counter()
             self.seq = 0
             self.meta = {"schema_version": 2, "settings": settings,
@@ -50,6 +51,9 @@ class Recorder:
             if not self.active:
                 return
             clock = clock or stamp()
+            if (self.deadline_ns is not None and source in ('camera', 'heart_rate', 'eda')
+                    and clock['host_monotonic_ns'] >= self.deadline_ns):
+                return
             # Drop samples captured before this session, e.g. queued BLE callbacks.
             if clock["host_monotonic_ns"] < self.origin:
                 return

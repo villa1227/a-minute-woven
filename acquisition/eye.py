@@ -1,4 +1,5 @@
 import math
+import time
 
 import cv2
 import numpy as np
@@ -10,12 +11,13 @@ class PupilDetector:
         self.face = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
         self.eye = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye_tree_eyeglasses.xml")
         self.cached_rois = {"image_left": None, "image_right": None}
-        self.tick = 0
+        self.next_detection = 0
 
     def automatic_rois(self, gray):
-        self.tick += 1
-        if self.tick % 6 != 1:
+        now = time.monotonic()
+        if now < self.next_detection:
             return dict(self.cached_rois)
+        self.next_detection = now + .5
         small = cv2.resize(gray, None, fx=0.5, fy=0.5)
         faces = self.face.detectMultiScale(small, 1.15, 5, minSize=(60, 60))
         self.cached_rois = {"image_left": None, "image_right": None}
@@ -36,8 +38,9 @@ class PupilDetector:
 
     def measure_pair(self, frame, manual_rois=None):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        automatic = self.automatic_rois(gray)
         manual_rois = manual_rois or {}
+        automatic = (self.automatic_rois(gray) if any(manual_rois.get(side) is None
+                     for side in ('image_left', 'image_right')) else {})
         eyes = {}
         for side in ("image_left", "image_right"):
             manual = manual_rois.get(side)

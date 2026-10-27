@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>作品重绘 · A Minute, Woven</title>
+<style>body{max-width:760px;margin:32px auto;padding:0 20px;background:#eeece5;color:#303c3f;font:15px/1.7 system-ui}canvas{width:min(100%,540px);height:auto;display:block;margin:24px 0;box-shadow:0 6px 24px #0001}button,input{font:inherit}#error{color:#943b32}button{padding:8px 16px}label{display:block;margin:20px 0}</style>
+<h1>作品重绘</h1><p>选择本机保存的 artwork.json，预览并下载最终 PNG。文件在浏览器内读取。</p>
+<label>作品参数文件 <input id="file" type="file" accept=".json,application/json"></label>
+<p id="error" role="alert"></p><p id="info" role="status"></p>
+<button id="download" disabled>下载 2400 × 3200 PNG</button>
+<canvas id="canvas" width="720" height="960" aria-label="作品预览"></canvas>
+<script src="weave.js"></script><script src="render-artwork.js"></script>
+</html>

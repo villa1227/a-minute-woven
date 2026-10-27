@@ -50,26 +50,36 @@ class ArtworkTests(unittest.TestCase):
         self.assertEqual(result['bands'][1]['values']['left'], 30)
         self.assertEqual(result['bands'][11]['values']['left'], 40)
         self.assertEqual(result['bands'][0], first)
-        self.assertTrue(result['downloadable'])
+        self.assertFalse(result['downloadable'])
+        self.assertEqual(result['phase'], 'finishing')
         self.assertFalse(self.rec.active)
         disk = json.loads(self.art.path.read_text(encoding='utf-8'))
         self.assertEqual(disk, result)
         self.advance(65)
         self.assertEqual(len(self.art.snapshot()['bands']), 12)
+        self.assertTrue(self.art.snapshot()['downloadable'])
+        self.assertEqual(json.loads(self.art.path.read_text(encoding='utf-8')), self.art.snapshot())
 
-    def test_live_preview_updates_before_five_second_commit(self):
+    def test_only_finalized_medians_are_published(self):
         self.send('heart_rate', {'bpm': 70, 'contact_detected': True}, .4)
         first = self.art.snapshot(include_preview=True)['preview']
-        self.assertEqual(first['index'], 0)
-        self.assertEqual(first['values']['heart'], 70)
-        self.assertEqual(first['counts']['heart'], 1)
+        self.assertIsNone(first)
+        self.assertEqual(self.art.snapshot()['phase'], 'preparing')
         self.send('heart_rate', {'bpm': 100, 'contact_detected': True}, 1.4)
         second = self.art.snapshot(include_preview=True)['preview']
-        self.assertEqual(second['values']['heart'], 85)
-        self.assertEqual(second['counts']['heart'], 2)
+        self.assertIsNone(second)
         self.assertEqual(self.art.snapshot()['bands'], [])
         self.advance(5)
-        self.assertEqual(self.art.snapshot(include_preview=True)['preview']['index'], 1)
+        self.assertIsNone(self.art.snapshot(include_preview=True)['preview'])
+        self.assertEqual(self.art.snapshot()['bands'][0]['values']['heart'], 85)
+        self.advance(7.5)
+        self.assertEqual(self.art.snapshot()['elapsed_s'], 7.5)
+        self.advance(60)
+        self.assertTrue(self.art.active)
+        with self.assertRaises(ValueError):
+            self.art.start(self.temp.name, {})
+        self.art.cancel()
+        self.assertFalse(self.art.snapshot()['downloadable'])
 
     def test_independent_references_clamping_and_missing_data(self):
         self.send('camera', camera(20), 1)
