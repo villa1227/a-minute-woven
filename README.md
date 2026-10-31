@@ -44,6 +44,10 @@ python -m venv .venv
 - `/api/trace?after=<cursor>` 提供最近 180 秒的增量采样缓冲；使用与采集状态相同的会话令牌。绘图轮询不会补造传感器样本，也不要求先开始磁盘记录。
 - Grove GSR 皮电已接入设备面板、实时曲线和同步记录；作品的颜色和密度暂沿用眼部与心率映射。参考 [可视化设计与报告说明](docs/visualization-notes.md) 编写报告。
 
+## 表情分类
+
+表情输入现已支持：在设备面板开启本机七类表情识别，默认目标 5 Hz，仅显示和同步记录，不影响作品。首次运行 `python scripts/download_expression_models.py` 安装模型，详见 [表情模块与接口](docs/expression.md)。
+
 ## Grove GSR 皮电
 
 - 使用已验证的 `skin_sigma/skin_sigma.ino`：UNO、A0、115200 波特率，目标 20 Hz。报文格式为 `GSR,1,序号,millis,ADC`。

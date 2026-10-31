@@ -6,3 +6,5 @@ diagnostics/
 .env
 .env.*
 *.log
+models/expression/*.onnx
+models/expression/*.tmp

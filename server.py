@@ -18,6 +18,8 @@ from acquisition.heart import HeartWorker, scan_devices
 from acquisition.live import LiveTrace
 from acquisition.eda import EdaService, list_ports
 from acquisition.artwork import ArtworkSession, valid_eye, valid_heart
+from acquisition.expression import ExpressionWorker, idle_state
+from acquisition.interfaces import SamplePublisher
 
 
 class Controller:
@@ -30,6 +32,8 @@ class Controller:
         self.eda_ports = []
         self.eda_ports_error = None
         self.camera = self.heart = None
+        self.expression = None
+        self.publisher = SamplePublisher(self.recorder, self.trace)
         self.devices = []
         self.cameras = []
         self.scanning = False
@@ -98,6 +102,7 @@ class Controller:
                     'camera_alive': cam_alive, 'heart_alive': hr_alive,
                     'camera_sample': camera_sample, 'camera_age_s': camera_age,
                     'camera_metrics': camera_metrics,
+                    'expression': self.expression.snapshot() if self.expression else idle_state(),
                     'camera_fresh': bool(cam_alive and camera_age is not None and camera_age < 2),
                     'heart_sample': self.last_hr, 'heart_age_s': hr_age,
                     'heart_fresh': bool(hr_alive and hr_age is not None and hr_age < 5),
@@ -114,6 +119,23 @@ class Controller:
 
     def action(self, command, data):
         with self.lock:
+            if command == 'expression_start':
+                if self.recorder.active or self.artwork.active:
+                    raise ValueError('请先结束创作或记录，再开启或调整表情识别')
+                if not self.camera or not self.camera.is_alive() or self.camera.stop_event.is_set():
+                    raise ValueError('请先打开摄像头')
+                if self.expression and self.expression.is_alive():
+                    raise ValueError('表情识别已运行或正在停止')
+                rate = data.get('rate', 5)
+                if isinstance(rate, bool) or rate not in (1, 2, 5, 10):
+                    raise ValueError('表情识别频率可选 1、2、5、10 Hz')
+                self.expression = ExpressionWorker(self.camera, self.publisher, rate)
+                self.expression.start()
+                return
+            if command == 'expression_stop':
+                if self.expression:
+                    self.expression.stop()
+                return
             if command == 'eda_scan':
                 self.enumerate_eda_ports()
                 return
@@ -154,6 +176,8 @@ class Controller:
                 self.messages['camera'] = '正在打开摄像头…'
                 self.camera.start()
             elif command == 'camera_stop':
+                if self.expression:
+                    self.expression.stop()
                 if self.camera:
                     self.camera.stop_event.set()
                     self.messages['camera'] = '正在关闭摄像头…'
@@ -223,6 +247,7 @@ class Controller:
                 'eye_coordinate_system': 'unmirrored_image_left_right',
                 'save_sampled_frames': self.camera.save_frames if state['camera_fresh'] else False,
                 'ble_device': self.selected_device,
+                'expression': {key: state['expression'][key] for key in ('running', 'target_hz', 'model')},
                 'ble_services': getattr(self.heart, 'service_info', None),
                 'eda': {'port': state['eda']['port'], 'baudrate': 115200, 'target_hz': 20,
                         'board': 'UNO', 'pin': 'A0', 'unit': 'ADC', 'calibrated': False,
@@ -243,6 +268,9 @@ class Controller:
                 self.scanning = False
 
     def close(self):
+        if self.expression:
+            self.expression.stop()
+            self.expression.join(timeout=5)
         self.eda.close()
         self.artwork.close()
         for worker in (self.camera, self.heart):
@@ -289,7 +317,7 @@ def main():
                 return self.send(200, body.encode('utf-8'), 'text/html; charset=utf-8')
             if path == '/render-artwork.html':
                 return self.send(200, (ROOT / 'web' / 'render-artwork.html').read_bytes(), 'text/html; charset=utf-8')
-            if path in ('/feedback.js', '/weave.js', '/artwork.js', '/eda.js', '/camera-preview.js', '/render-artwork.js'):
+            if path in ('/feedback.js', '/weave.js', '/artwork.js', '/eda.js', '/camera-preview.js', '/render-artwork.js', '/expression.js'):
                 return self.send(200, (ROOT / 'web' / path[1:]).read_bytes(), 'text/javascript; charset=utf-8')
             if self.headers.get('X-Session-Token') != token:
                 return self.send(403, b'{}')

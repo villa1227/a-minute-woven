@@ -1,0 +1,45 @@
+{
+  "synthetic": true,
+  "description": "Entirely synthetic expression interface examples; not device measurements. Times are illustrative.",
+  "labels": ["angry", "disgust", "fearful", "happy", "neutral", "sad", "surprised"],
+  "rows": [
+    {
+      "source": "expression",
+      "host_monotonic_ns": 1000000000,
+      "host_utc": "2026-10-31T00:00:00.000000+00:00",
+      "data": {
+        "frame_id": 1, "frame_width": 1280, "frame_height": 720,
+        "quality": "classified_unvalidated", "face_count": 1,
+        "face_box": [400, 160, 260, 300], "face_score": 0.98,
+        "scores": {"angry": 0.02, "disgust": 0.01, "fearful": 0.02, "happy": 0.72, "neutral": 0.18, "sad": 0.02, "surprised": 0.03},
+        "label": "happy", "model_id": "opencv-zoo-mobilefacenet-2022july",
+        "processing_ms": 35, "frame_age_ms": 40, "observed_hz": null,
+        "completed_monotonic_ns": 1040000000, "completed_utc": "2026-10-31T00:00:00.040000+00:00"
+      }
+    },
+    {
+      "source": "expression",
+      "host_monotonic_ns": 1200000000,
+      "host_utc": "2026-10-31T00:00:00.200000+00:00",
+      "data": {
+        "frame_id": 7, "frame_width": 1280, "frame_height": 720,
+        "quality": "no_face", "face_count": 0, "face_box": null, "face_score": null,
+        "scores": null, "label": null, "model_id": "opencv-zoo-mobilefacenet-2022july",
+        "processing_ms": 20, "frame_age_ms": 25, "observed_hz": 5,
+        "completed_monotonic_ns": 1225000000, "completed_utc": "2026-10-31T00:00:00.225000+00:00"
+      }
+    },
+    {
+      "source": "expression",
+      "host_monotonic_ns": 1400000000,
+      "host_utc": "2026-10-31T00:00:00.400000+00:00",
+      "data": {
+        "frame_id": 13, "frame_width": 1280, "frame_height": 720,
+        "quality": "multiple_faces", "face_count": 2, "face_box": null, "face_score": null,
+        "scores": null, "label": null, "model_id": "opencv-zoo-mobilefacenet-2022july",
+        "processing_ms": 20, "frame_age_ms": 25, "observed_hz": 5,
+        "completed_monotonic_ns": 1425000000, "completed_utc": "2026-10-31T00:00:00.425000+00:00"
+      }
+    }
+  ]
+}

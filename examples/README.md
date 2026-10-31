@@ -1,5 +1,7 @@
 # 模拟作品
 
+另附 `expression.synthetic.json`：分类成功、无人脸、多人脸的表情接口样例，供其他开发者使用。它不是 artwork.json，不能导入作品重绘页，也不参与现有作品生成。
+
 `artwork.synthetic.json` 是完全合成的完成作品，包含 12 个时间段。数值、样本数量和日期均用于演示，不来自任何参与者或设备，不能用于评价采集性能或生理结论。
 
 1. 下载或克隆整个仓库，双击 `web/render-artwork.html`。

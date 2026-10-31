@@ -51,8 +51,11 @@ class Recorder:
             if not self.active:
                 return
             clock = clock or stamp()
-            if (self.deadline_ns is not None and source in ('camera', 'heart_rate', 'eda')
+            if (self.deadline_ns is not None and source in ('camera', 'heart_rate', 'eda', 'expression')
                     and clock['host_monotonic_ns'] >= self.deadline_ns):
+                return
+            if (source == 'expression' and self.deadline_ns is not None
+                    and data['completed_monotonic_ns'] >= self.deadline_ns):
                 return
             # Drop samples captured before this session, e.g. queued BLE callbacks.
             if clock["host_monotonic_ns"] < self.origin:
@@ -65,7 +68,7 @@ class Recorder:
             self.seq += 1
             self.counts[source] += 1
             # CSV is a convenience view. JSONL retains nested/raw values.
-            if source in ("camera", "heart_rate", "eda"):
+            if source in ("camera", "heart_rate", "eda", "expression"):
                 flat = {k: row[k] for k in ("seq", "host_monotonic_ns", "host_utc", "session_s")}
                 flat.update({k: json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v
                              for k, v in data.items()})
