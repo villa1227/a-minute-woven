@@ -4,6 +4,8 @@
 
 ## 快速开始
 
+独立的“赛博镜子”前端现支持拍照/导入、可调线稿生成和手写板描摹；不改变原采集后端。启动方式与绘图、笔输入接口见 [赛博镜子说明](mirror/README.md)。
+
 目前主要在 Windows、USB 摄像头和 Xiaomi Smart Band 10 上验证。需要 Python 3 和可用的蓝牙适配器。
 
 ```powershell
