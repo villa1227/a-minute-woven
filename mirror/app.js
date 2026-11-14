@@ -48,6 +48,7 @@
     const old=stream;stream=null;
     if(old)for(const track of old.getTracks()){track.onended=null;track.stop();}
     video.pause();video.srcObject=null;video.hidden=true;
+    window.MirrorDevices?.photoEnded();
   }
   function invalidateResult(){
     window.MirrorTracing?.disable();
@@ -97,10 +98,12 @@
     const ticket=++operation;opening=true;clearError();stopStream();invalidateResult();clearPhoto();phase='empty';renderControls();
     setStatus('正在请求摄像头，请在浏览器提示中允许访问。');
     try{
+      await window.MirrorDevices?.beforePhoto();
+      if(ticket!==operation){window.MirrorDevices?.photoEnded();return;}
       if(!navigator.mediaDevices?.getUserMedia)throw Object.assign(Error(),{name:'SecurityError'});
       const deviceId=$('camera').value;
       const next=await navigator.mediaDevices.getUserMedia({audio:false,video:{width:{ideal:1280},height:{ideal:960},...(deviceId?{deviceId:{exact:deviceId}}:{})}});
-      if(ticket!==operation){next.getTracks().forEach(t=>t.stop());return;}
+      if(ticket!==operation){next.getTracks().forEach(t=>t.stop());window.MirrorDevices?.photoEnded();return;}
       stream=next;video.srcObject=next;video.hidden=false;$('photoPlaceholder').hidden=true;
       const onEnded=()=>{
         if(stream!==next)return;
@@ -116,7 +119,7 @@
       setStatus('调整好位置，在你想留下的一刻点击“拍照”。');
     }catch(error){
       if(ticket!==operation)return;
-      stopStream();$('photoPlaceholder').hidden=false;setStatus('也可以导入本机照片继续。');showError(cameraError(error));
+      stopStream();window.MirrorDevices?.photoEnded();$('photoPlaceholder').hidden=false;setStatus('也可以导入本机照片继续。');showError(cameraError(error));
     }finally{if(ticket===operation){opening=false;renderControls();}}
   }
   function sizeOf(w,h){const scale=Math.min(1,1600/Math.max(w,h));return [Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale))];}
@@ -126,6 +129,7 @@
     ctx.save();if(mirror){ctx.translate(width,0);ctx.scale(-1,1);}ctx.drawImage(image,0,0,width,height);ctx.restore();
     source=null;sourceKind=kind;phase='draft';photo.hidden=false;$('photoPlaceholder').hidden=true;
     photo.dataset.sessionId=crypto.randomUUID();
+    window.MirrorSensors?.newPhoto();
     $('sourceMeta').textContent=width+' × '+height+(mirror?' · 镜像':'');
     $('mirrorNote').textContent=kind==='camera'?'摄像头已释放 · 镜像照片':'已按照片方向导入';
     setStatus('这是你想留下的一刻吗？确认后生成线稿，也可以重拍或换一张照片。');renderControls();
@@ -133,11 +137,11 @@
   function capture(){
     if(!stream||video.readyState<2||!video.videoWidth)return;
     operation++;opening=false;clearError();
-    draftFrom(video,video.videoWidth,video.videoHeight,true,'camera');stopStream();renderControls();
+    draftFrom(video,video.videoWidth,video.videoHeight,true,'camera');stopStream();window.MirrorDevices?.photoEnded();renderControls();
   }
   async function importPhoto(){
     const file=$('photoFile').files[0];$('photoFile').value='';if(!file)return;
-    const ticket=++operation;opening=false;stopStream();invalidateResult();clearPhoto();phase='empty';clearError();renderControls();
+    const ticket=++operation;opening=false;stopStream();window.MirrorDevices?.photoEnded();invalidateResult();clearPhoto();phase='empty';clearError();renderControls();
     setStatus('正在读取照片…');let bitmap=null;
     try{
       if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw Error('请选择 JPEG、PNG 或 WebP 照片。');
@@ -200,7 +204,7 @@
   }
   $('openCamera').onclick=openCamera;
   $('camera').onchange=()=>{if(stream||opening)openCamera();};
-  $('closeCamera').onclick=()=>{operation++;opening=false;stopStream();clearPhoto();phase='empty';setStatus('摄像头已关闭，可重新打开或导入照片。');renderControls();};
+  $('closeCamera').onclick=()=>{operation++;opening=false;stopStream();window.MirrorDevices?.photoEnded();clearPhoto();phase='empty';setStatus('摄像头已关闭，可重新打开或导入照片。');renderControls();};
   $('capture').onclick=capture;$('confirm').onclick=confirm;$('retake').onclick=openCamera;
   $('photoFile').onchange=importPhoto;$('download').onclick=download;
   for(const input of document.querySelectorAll('input[name="detail"]'))input.onchange=()=>{applyPreset();scheduleRender();};

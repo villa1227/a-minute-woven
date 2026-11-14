@@ -1,16 +1,22 @@
 # 赛博镜子 · 拍照线稿
 
-这是独立的第一版前端，不连接、修改或替换原采集后端，也不改变织锦页面。只实现拍照/导入、确认、照片轮廓线稿和 PNG 下载。
+统一镜子页面支持拍照/导入、线稿、手写板描摹、四通道数据画笔，以及摄像头、表情、心率、皮电和原始记录的管理。采集继续复用现有 Controller，不修改其接口和织锦页面。
 
 ## 启动
 
 在仓库根目录运行：
 
 ```powershell
-python -m http.server 8767 --bind 127.0.0.1 --directory mirror
+python mirror/serve.py
 ```
 
-打开 http://127.0.0.1:8767/ ，使用当前版本 Edge 或 Chrome。页面没有构建步骤、第三方依赖、模型下载或远程请求。需要通过此本机地址打开，不要直接双击 HTML（Worker 和摄像头权限需要安全上下文）。该静态服务器只用于本机开发。
+打开 http://127.0.0.1:8767/ ，使用当前版本 Edge 或 Chrome。新镜子服务仅使用 Python 标准库，没有新安装依赖、构建步骤或远程请求；页面处理在本机完成。不要直接双击 HTML。原来的 `python -m http.server ...` 只适合无数据的静态调试，不提供 `/api/sensors`；同一端口不能同时运行两个服务。
+
+只需这一条命令和一个页面。启动时若原 8765 服务已运行，会复用该服务；未运行则在镜子进程内加载原 Controller。两种模式均在镜子页的“设备与采集”操作。连接方式启动后固定，不会因短暂断线自动创建第二个采集器。内置模式不需要再运行 app.py，也不要额外开启另一套采集争用设备。退出镜子服务会释放它内置的设备并保存活动记录；复用模式不会关闭另一个进程管理的设备。
+
+先在镜子拍照，确认并生成线稿；接着在本页“设备与采集”开启摄像头和表情，扫描/连接手环与皮电。采集约 5 秒后设置个人参考，再描摹。采集摄像头开启时点击拍照会先暂停它及表情，等待释放；正在记录或创作时禁止拍照，不自动停止记录。拍完需手动重新开启采集与表情。导入文件不占用摄像头。只有部分设备可用也能画；每个未就绪通道会显示状态。
+
+自动眼区不稳定时，在本页采集预览选择画面左/右眼并拖动框选；该预览为原始方向，拍照预览为镜像。表情需要完整脸部、默认 5 Hz。原始记录仍写原 recordings/；它与页面的输入 JSON 是两份独立记录。
 
 选择摄像头后点击“打开摄像头”，允许浏览器访问。在想拍照的时刻点击“拍照”，然后“确认使用”或“重拍”。没有自动拍摄或倒计时。也可导入 JPEG、PNG、WebP；导入后同样确认。原程序若正使用相同摄像头，请先在原设备面板关闭摄像头。
 
@@ -62,7 +68,7 @@ processor.dispose(); // 离开页面时释放 Worker
 
 每个新任务终止旧 Worker，始终从已确认照片的副本计算；取消不是仅忽略旧消息，因此不会积压耗时任务。`processingMs` 不包含 Worker 启动和像素复制。预览和 PNG 用同一个透明层合成到白底。快速更改参数时下载禁用，只有最新任务完成后才可导出。
 
-原照片、参考线稿、描摹分别为独立图层。生成线稿后可使用 XP-Pen Deco 640 描摹，固定黑色 2 px；笔压仅读取与显示，不改变线宽或颜色，也没有生理映射和后端数据流。
+原照片、参考线稿、描摹分别为独立图层。生成线稿后可使用 XP-Pen Deco 640 描摹；数据画笔只影响新笔画。笔压仅读取、显示与记录，不叠加控制粗细；关闭数据画笔恢复固定黑色 2 px。
 
 ## 手写板输入
 
@@ -72,7 +78,7 @@ processor.dispose(); // 离开页面时释放 Worker
 
 请在驱动中确认 Windows Ink 设置，并使手写板映射到显示该页面的屏幕。若只出现鼠标事件，或轻压重压没有数值变化，先检查驱动设置和浏览器。需要参与者实际轻压、重压、抬笔画几笔，才能确认真实笔压；自动测试生成的 pen 事件不构成实机验证。
 
-主笔尖接触和默认启用的鼠标左键回退可画线；触摸、副指针、侧键和橡皮操作不画线。抬笔、越界重入、失焦、页面隐藏或取消会断开路径；只有新的 pointerdown 能在中断后重新落笔。缩放页面只调整显示坐标，不重置画布。清除描摹不改变底稿；隐藏底稿不影响描摹；现有 PNG 下载仍仅导出底稿。
+主笔尖接触和默认启用的鼠标左键回退可画线；触摸、副指针、侧键和橡皮操作不画线。抬笔、越界重入、失焦、页面隐藏或取消会断开路径；只有新的 pointerdown 能在中断后重新落笔。缩放页面只调整显示坐标，不重置画布。清除描摹不改变底稿；隐藏底稿不影响描摹。“下载线稿 PNG”只导出底稿，“下载描摹 PNG”只导出白底彩色描摹，不包含底稿、照片或设备面板。
 
 替换照片或重新计算线稿会清除描摹和本次输入记录。输入仅在页面内存中，最多保留 50,000 点（接触及其释放样本），达到上限停止，需点击“清除描摹”才能重新记录。点击“下载输入 JSON”才保存文件，不含照片。
 
@@ -82,19 +88,32 @@ processor.dispose(); // 离开页面时释放 Worker
 
 统一样本字段：strokeId、eventType、pointerType、pointerId、x/y（原图像素）、nx/ny（未限幅归一化值）、outside、contact、pressure、tiltX/tiltY、twist、button/buttons、eventTimeMs、receivedTimeMs。压力和角度保持浏览器报告值；不声称取得硬件原始压力等级。`getCoalescedEvents()` 存在时只使用其样本列表，不再追加父事件，不生成预测或插值样本。两个时间字段为浏览器单调毫秒，不与原 Python 后端单调时钟混用。
 
-JSON 包含 schemaVersion=1、sessionId（照片 UUID，同一照片重新生成仍相同）、canvas 尺寸、timeOrigin、clock、limit、full 和 samples。重开页面后不恢复。中断原因通过 onEnd 回调传出，不添加虚构的抬笔采样；仅浏览器实际 pointerup 才有对应释放样本。极端情况下上限可能截断笔画，此时 full=true。
+`PenInput.export()` 继续提供 schemaVersion=1 的纯输入数据；页面下载升级为 schemaVersion=2，保留全部原字段，并附 mapping、renderSeed、referenceHistory、configurationHistory 与 segments。sampleIndex 引用原始 samples，brush 保存当时生效的颜色、宽度、透明度、柔边、硬度、摆动、频率、纹理和映射版本。中断用独立 kind=break 记录，不伪造 pointerup。照片 UUID、canvas 尺寸与 timeOrigin 一并保存；不保存照片或任何令牌。达到 50,000 点时 full=true，笔画可能被截断。
 
-`tracing.js` 通过 `MirrorTracing.enable(width,height,sessionId)`／`disable()` 管理独立描摹层。透明画布与底稿可见矩形一致，保留图像坐标而非 CSS 坐标。侧键、笔压映射、Pad 网络连接与完整作品导出留待后续。
+`tracing.js` 通过 `MirrorTracing.enable(width,height,sessionId)`／`disable()` 管理独立描摹层。透明画布与底稿可见矩形一致，保留图像坐标而非 CSS 坐标。`BrushRenderer.replay(ctx, exportedV2)` 按导出的 snapshots 与 break 事件重绘到同尺寸空白透明画布；同浏览器测试逐像素一致。不同平台的 Canvas 栅格化可能有差异。侧键、笔压映射、Pad 网络连接留待后续。
+
+## 数据画笔与开发接口
+
+完整的映射规则、时钟、鉴权和开发接口见 [数据画笔说明](brush-data.md)。四类输入仅用于艺术反馈，不判断思考或心理状态；皮电为未标定 ADC。颜色用表情分数混色，眼部调粗细与硬度，皮电调透明/柔边，心率调侧向节奏。反馈强度 1～5（步长 0.5），默认 3“明显”，同时增强灵敏度与表现范围；1 为先前温和参数，5 为强烈。原笔压仍不控制粗细。参数变化只影响新笔画，缺失通道不会因强度增加而生成数据，关闭映射恢复黑色 2 px。
+
+建议先用强度 3，变化不明显时升至 4～5；若摆动妨碍描摹则降低。先确认通道有数值且参考就绪，再比较效果；没接到数据时加大强度不会凭空产生变化。
+
+`examples/brush.synthetic.json` 为纯合成四通道配置，供测试读取，生产不自动载入、不注入原采集服务。原传感器数据记录仍由 8765 页面管理；镜子不会启动原记录，也不把渲染插值当成真实采样。
 
 ## 验证
 
 ```powershell
 node --test tests/test_mirror.cjs
 node --test tests/test_pen_input.cjs
+node --test tests/test_brush.cjs
 python -m unittest discover -s tests -p "test_*.py"
 node --test tests/test_weave.cjs tests/test_feedback.cjs
 ```
 
-可选完整浏览器验证（需要 Playwright、Edge 和上面的静态服务器）：`node tests/check_mirror_browser.cjs`。使用生成的测试图和模拟浏览器摄像头，覆盖镜像、定格释放、重拍、切换、权限拒绝/占用/断连、导入 EXIF、取消任务、下载和移动排版。样图及验证说明见 `tests/mirror-fixtures.md`。不提交参与者照片。
+可选完整浏览器验证（需要 Playwright、Edge 和上面的镜子服务）：`node tests/check_mirror_browser.cjs`。使用生成的测试图和模拟浏览器摄像头，覆盖镜像、定格释放、重拍、切换、权限拒绝/占用/断连、导入 EXIF、取消任务、下载和移动排版。样图及验证说明见 `tests/mirror-fixtures.md`。不提交参与者照片。
 
 描摹浏览器验证：`node tests/check_pen_browser.cjs`，使用合成笔事件检查图层对齐、越界断线、输入 JSON、底稿显隐和清除；不代替 XP-Pen 真实输入确认。
+
+数据画笔浏览器验证：`node tests/check_brush_browser.cjs`，只用模拟四通道响应和笔事件，验证校准、参数变化、断连、重启、旧笔画不变、v2 重绘与 PNG；不操作真实传感器。
+
+统一页面验证：`node tests/check_devices_browser.cjs`，用模拟设备确认连接命令、照片/采集互斥、记录保护及反馈强度；并生成相同路径、相同小幅数据变化的强度 1/3/5 比较图至忽略的 diagnostics/mirror/。

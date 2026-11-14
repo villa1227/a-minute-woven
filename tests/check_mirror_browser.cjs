@@ -17,6 +17,7 @@ function withOrientation6(jpeg){
   try{
     const page=await browser.newPage({viewport:{width:1320,height:1200}}),errors=[],requests=[];
     page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>requests.push(r));
+    await page.route('**/api/sensors*',route=>route.fulfill({json:{connected:false,error:'synthetic camera check',trace:null,state:null}}));
     await page.addInitScript(()=>{
       window.__cameraStats={opened:0,stopped:0,selected:[]};window.__cameraError=null;
       const original=navigator.mediaDevices;

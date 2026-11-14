@@ -5,10 +5,21 @@ import numpy as np
 import cv2
 from acquisition.camera import CameraWorker
 from acquisition.core import Recorder, stamp
-from acquisition.eye import PupilDetector
+from acquisition.eye import PupilDetector, load_cascade
 
 
 class CameraPipelineTests(unittest.TestCase):
+    def test_unicode_cascade_path_and_clear_model_load_error(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / '中文模型.xml'
+            path.write_bytes((Path(cv2.data.haarcascades) / 'haarcascade_frontalface_default.xml').read_bytes())
+            detector = load_cascade(path)
+            self.assertFalse(detector.empty())
+            self.assertEqual(len(detector.detectMultiScale(np.zeros((100,100),np.uint8))),0)
+            path.write_text('invalid',encoding='utf-8')
+            with self.assertRaisesRegex(RuntimeError,'模型加载失败'): load_cascade(path)
     def test_manual_rois_skip_cascade_and_auto_is_time_based(self):
         detector = PupilDetector()
         frame = np.full((100, 200, 3), 150, np.uint8)

@@ -1,0 +1,8 @@
+{
+  "synthetic": true,
+  "description": "Artificial four-channel values for tests only. Not participant measurements. Feed rows with current times through the test adapter; production never loads this automatically.",
+  "baseline": {"left":20,"right":24,"heart":72,"eda":500},
+  "changed": {"left":26,"right":28,"heart":92,"eda":600},
+  "expression": {"quality":"classified_unvalidated","scores":{"happy":0.72,"neutral":0.18,"angry":0.02,"sad":0.02,"fearful":0.02,"surprised":0.03,"disgust":0.01}},
+  "state": {"camera_alive":true,"heart_alive":true,"eda":{"connected":true},"expression":{"running":true,"fresh":true}}
+}

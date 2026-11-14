@@ -35,6 +35,7 @@ const assert=require('node:assert/strict');
   });assert.equal(afterCancel,0);
   // A real browser mouse path is explicitly reported as fallback.
   await page.click('#clearTracing');
+  await page.locator('#tracingCanvas').scrollIntoViewIfNeeded();
   const bounds=await page.locator('#tracingCanvas').boundingBox();
   await page.mouse.move(bounds.x+bounds.width*.3,bounds.y+bounds.height*.3);await page.mouse.down();
   await page.mouse.move(bounds.x+bounds.width*.4,bounds.y+bounds.height*.4);await page.mouse.up();

@@ -1,15 +1,34 @@
 import math
 import time
+from pathlib import Path
 
 import cv2
 import numpy as np
 
 
+def load_cascade(path):
+    """Use Python Unicode-aware I/O, then deserialize instead of native path I/O."""
+    path = Path(path)
+    try:
+        content = path.read_text(encoding='utf-8')
+        storage = cv2.FileStorage(content, cv2.FILE_STORAGE_READ | cv2.FILE_STORAGE_MEMORY)
+        try:
+            detector = cv2.CascadeClassifier()
+            loaded = detector.read(storage.getFirstTopLevelNode())
+        finally:
+            storage.release()
+        if not loaded or detector.empty():
+            raise ValueError('模型内容无效')
+        return detector
+    except Exception as exc:
+        raise RuntimeError('人脸/眼区模型加载失败：' + path.name + '；请检查 OpenCV 安装和文件读取权限') from exc
+
+
 class PupilDetector:
     """Conservative dark-contour candidates, NOT a validated pupillometer."""
     def __init__(self):
-        self.face = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        self.eye = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye_tree_eyeglasses.xml")
+        self.face = load_cascade(Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml")
+        self.eye = load_cascade(Path(cv2.data.haarcascades) / "haarcascade_eye_tree_eyeglasses.xml")
         self.cached_rois = {"image_left": None, "image_right": None}
         self.next_detection = 0
 
