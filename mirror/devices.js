@@ -60,6 +60,7 @@
     const eyes=s.camera_sample?.eyes||{};
     $('deviceEyeStatus').textContent=['image_left','image_right'].map((side,i)=>`${i?'右':'左'}眼：${eyes[side]?.candidate_diameter_px?.toFixed(1)??'—'} px · ${eyes[side]?.quality??'等待候选'}`).join(' / ');
     $('deviceRecordStatus').textContent=s.recording?`记录中 ${(s.elapsed_s||0).toFixed(1)} s · ${Object.entries(s.counts||{}).map(([k,v])=>k+': '+v).join(' / ')}`:s.note||'记录保存至本机 recordings/';
+    if(document.body.dataset.artworkFinished==='true')for(const e of document.querySelectorAll('#sensorDevices button,#sensorDevices input,#sensorDevices select'))e.disabled=true;
   }
   async function beforePhoto(){
     // Called by an explicit photo action only. Never stop someone else's active recording.

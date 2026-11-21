@@ -5,6 +5,7 @@ import re
 import secrets
 import threading
 import sys
+import importlib.util
 import urllib.error
 import urllib.request
 from urllib.parse import parse_qs, urlsplit
@@ -145,7 +146,11 @@ def select_bridge():
         controller.enumerate_eda_ports()
         print('Collector integrated in mirror service; no second startup needed.', flush=True)
         return LocalBridge(controller)
-def make_handler(bridge, token):
+def make_handler(bridge, token, shares=None):
+    if shares is None:
+        spec=importlib.util.spec_from_file_location('mirror_sharing',ROOT/'sharing.py')
+        sharing=importlib.util.module_from_spec(spec);spec.loader.exec_module(sharing)
+        shares=sharing.ArtworkShares()
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
             pass
@@ -175,6 +180,8 @@ def make_handler(bridge, token):
                 return self.send(200, path.read_bytes(), 'text/css' if path.suffix == '.css' else 'text/javascript')
             if url.path == '/woven-renderer.js':
                 return self.send(200,(ROOT.parent/'web'/'weave.js').read_bytes(),'text/javascript')
+            if url.path == '/vendor/qrcode.js':
+                return self.send(200,(ROOT/'vendor'/'qrcode.js').read_bytes(),'text/javascript')
             if url.path not in ('/api/sensors', '/api/device-frame'):
                 return self.send(404, b'{}')
             if self.headers.get('X-Mirror-Token') != token:
@@ -207,7 +214,8 @@ def make_handler(bridge, token):
             self.connection.settimeout(5)
             try:
                 size=int(self.headers.get('Content-Length',0))
-                if not 0<size<=16384:raise ValueError()
+                limit=8*1024*1024 if self.path=='/api/share/upload' else 16384
+                if not 0<size<=limit:raise ValueError()
                 body=self.rfile.read(size)
             except (ValueError, OSError):
                 self.close_connection=True
@@ -217,6 +225,15 @@ def make_handler(bridge, token):
                     or self.headers.get('Origin') not in ('http://' + h for h in hosts)):
                 self.close_connection=True
                 return self.send(403,b'{}')
+            if self.path=='/api/share/upload':
+                try:
+                    if self.headers.get_content_type()!='image/png':raise ValueError('上传作品必须是 PNG')
+                    self.send(200,json.dumps(shares.share(body),ensure_ascii=False).encode())
+                except ValueError as exc:
+                    self.send(400,json.dumps({'error':str(exc)},ensure_ascii=False).encode())
+                except Exception:
+                    self.send(502,'{"error":"临时图床连接失败，请检查网络或 VPN 后重试；作品仍保留在页面，可本地下载。"}'.encode())
+                return
             command = urlsplit(self.path).path.removeprefix('/api/device/')
             if not self.path.startswith('/api/device/') or command not in COMMANDS:
                 self.close_connection=True

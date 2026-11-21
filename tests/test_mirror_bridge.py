@@ -77,6 +77,9 @@ class BridgeTests(unittest.TestCase):
                     action.assert_called_once_with('expression_start',{'rate':5})
                 with patch.object(bridge,'frame',return_value=b'jpeg'):
                     self.assertEqual(request('/api/device-frame',headers)[1],b'jpeg')
+                self.assertEqual(request('/api/share/upload',{'Content-Type':'image/png'},data=b'bad')[0],403)
+                self.assertEqual(request('/api/share/upload',headers,data=b'{}')[0],400)
+                self.assertEqual(request('/api/share/upload',{**headers,'Content-Type':'image/png'},data=b'invalid-png')[0],400)
                 self.assertEqual(snapshot.call_count,1)
             finally: server.shutdown();server.server_close();thread.join()
 

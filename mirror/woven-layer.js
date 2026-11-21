@@ -65,6 +65,7 @@
   $('wovenEnabled').onchange=()=>{ensure();canvas.hidden=!$('wovenEnabled').checked||!session;};
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&session){if(frame!==null)cancelAnimationFrame(frame);frame=null;render();}});
   window.MirrorWoven={
+    freeze(){if(session){const elapsed=session.tick();session.clock=()=>session.origin+elapsed;if(frame!==null)cancelAnimationFrame(frame);frame=null;render();}},
     setup(w,h,id){this.clear();width=w;height=h;seed=id;canvas.width=w;canvas.height=h;ensure();},
     clear(){if(frame!==null)cancelAnimationFrame(frame);frame=null;session=null;width=height=0;cache.clear();canvas.width=canvas.height=1;canvas.hidden=true;$('wovenStatus').textContent='开启后自动织入 60 秒数据，约 65 秒完成；缺失数据仍有基础织纹。';},
     ingest(packet){session?.ingest(packet);},

@@ -25,6 +25,7 @@ const fixture=JSON.parse(fs.readFileSync(path.join(root,'examples/brush.syntheti
     await p.waitForFunction(()=>!document.getElementById('confirm').hidden);await p.click('#confirm');await p.waitForFunction(()=>!document.getElementById('download').disabled);
   }
   await importImage();
+  await page.locator('.advanced-art').evaluate(e=>e.open=true);
   console.log('Background check: initial image ready');
   assert.equal(await page.locator('#backgroundDiameter').inputValue(),'6');
   assert.equal(await page.locator('#backgroundCanvas').evaluate(c=>c.width),400);
@@ -71,7 +72,8 @@ const fixture=JSON.parse(fs.readFileSync(path.join(root,'examples/brush.syntheti
   const replay=await page.evaluate(data=>{const c=document.createElement('canvas');c.width=data.canvas.width;c.height=data.canvas.height;
     BackgroundBrush.BackgroundBrushRenderer.replay(c.getContext('2d'),data);return c.toDataURL()===document.getElementById('backgroundCanvas').toDataURL();},input);assert.equal(replay,true);
   const artwork=await download('#downloadArtwork'),background=await download('#downloadTracing'),guide=await download('#download');
-  for(const png of [artwork,background,guide]){assert.equal(png.readUInt32BE(16),400);assert.equal(png.readUInt32BE(20),500);}
+  for(const png of [artwork,background,guide])assert.equal(png.readUInt32BE(16),400);
+  assert.equal(artwork.readUInt32BE(20),564);assert.equal(background.readUInt32BE(20),500);assert.equal(guide.readUInt32BE(20),500);
   assert.notDeepEqual(artwork,background,'artwork includes black lines even when guide hidden');
   const saved=await page.locator('#backgroundCanvas').evaluate(c=>c.toDataURL());
   console.log('Background check: input replay and downloads ready');

@@ -78,6 +78,7 @@
     $('sourceMeta').textContent='等待取景';$('photoPlaceholder').hidden=false;
   }
   function renderControls(){
+    if(document.body.dataset.artworkFinished==='true')return;
     const hasDraft=phase==='draft',confirmed=phase==='confirmed';
     $('capture').hidden=!stream;$('capture').disabled=!stream||video.readyState<2||opening;
     $('closeCamera').hidden=!stream;
