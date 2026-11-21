@@ -58,6 +58,9 @@ class BridgeTests(unittest.TestCase):
                     return status, body
             try:
                 status,html=request('/');self.assertEqual(status,200);self.assertIn(b'local-token',html)
+                status,background=request('/background');self.assertEqual(status,200);self.assertIn(b'background-tracing.js',background);self.assertIn(b'local-token',background)
+                self.assertNotIn(b'background-tracing.js',html)
+                self.assertEqual(request('/background/')[0],200)
                 self.assertEqual(request('/api/sensors')[0],403)
                 self.assertEqual(request('/api/sensors',{'X-Mirror-Token':'local-token','Origin':'http://evil.test'})[0],403)
                 self.assertEqual(request('/api/sensors',{'X-Mirror-Token':'local-token','Host':'evil.test'})[0],403)

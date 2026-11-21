@@ -1,0 +1,12 @@
+/* New edition only: visual layers sit below a transparent input surface. */
+.background-stage #lineCanvas{position:relative;z-index:2;pointer-events:none;background:transparent}
+.background-stage #wovenCanvas{position:absolute;z-index:0;pointer-events:none;max-width:none;max-height:none}
+.background-stage #backgroundCanvas{position:absolute;z-index:1;pointer-events:none;max-width:none;max-height:none}
+.background-stage #tracingCanvas{z-index:3;background:transparent}
+.background-stage #processing{z-index:4}
+.background-stage .placeholder{z-index:0}
+.background-tools{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:14px 0}
+.background-tools label{display:grid;grid-template-columns:1fr auto;gap:5px 16px;min-width:250px;font-size:12px}
+.background-tools input{grid-column:1/3;width:100%;accent-color:var(--accent)}
+#backgroundSizeStatus{color:var(--muted);font-size:12px}
+.background-tools input[type=checkbox]{width:auto;margin-right:6px}

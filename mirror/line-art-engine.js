@@ -5,7 +5,7 @@
   const PRESETS=Object.freeze(Object.fromEntries(Object.entries({
     minimal:{sigma:2.5,percentile:.82,minHigh:35,minComponent:60,lowRatio:.5},
     simple:{sigma:1.7,percentile:.64,minHigh:24,minComponent:24,lowRatio:.4},
-    standard:{sigma:1.3,percentile:.77,minHigh:20,minComponent:15,lowRatio:.4},
+    standard:{sigma:1.5,percentile:.85,minHigh:20,minComponent:15,lowRatio:.4},
     rich:{sigma:1.05,percentile:.70,minHigh:18,minComponent:12,lowRatio:.4}
   }).map(([key,value])=>[key,Object.freeze(value)])));
   const RANGES=Object.freeze({sigma:Object.freeze([.5,5]),percentile:Object.freeze([.1,.99]),

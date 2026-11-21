@@ -6,7 +6,7 @@ from .eye import PupilDetector
 
 
 class CameraWorker(threading.Thread):
-    def __init__(self, index, backend, rate, recorder, status, save_frames, on_sample=None):
+    def __init__(self, index, backend, rate, recorder, status, save_frames, on_sample=None, capture_only=False):
         super().__init__(daemon=True)
         self.index, self.backend, self.rate = index, backend, rate
         self.recorder, self.status, self.save_frames = recorder, status, save_frames
@@ -24,6 +24,7 @@ class CameraWorker(threading.Thread):
         self.jpeg_key = None
         self.jpeg = None
         self.capture_error = None
+        self.capture_only = capture_only
 
     def set_roi(self, roi, side):
         with self.lock:
@@ -110,10 +111,16 @@ class CameraWorker(threading.Thread):
             self.camera_info = {'index': self.index, 'backend': cap.getBackendName(),
                 'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), 'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
                 'reported_fps': cap.get(cv2.CAP_PROP_FPS)}
-            self.status('camera', '摄像头已打开；连续预览与双眼识别独立运行')
+            self.status('face_camera' if self.capture_only else 'camera', '全脸摄像头已打开' if self.capture_only else '摄像头已打开；连续预览与双眼识别独立运行')
             self.recorder.emit('event', {'kind': 'camera_opened', **self.camera_info})
             capture = threading.Thread(target=self._capture, args=(cap,), daemon=True)
             capture.start()
+            if self.capture_only:
+                while not self.stop_event.wait(.05):
+                    pass
+                if self.capture_error:
+                    raise self.capture_error
+                return
             detector = PupilDetector()
             due, previous, processed = 0, None, -1
             while not self.stop_event.is_set():
@@ -151,7 +158,7 @@ class CameraWorker(threading.Thread):
             if self.capture_error:
                 raise self.capture_error
         except Exception as exc:
-            self.status('camera', '摄像头错误：' + str(exc))
+            self.status('face_camera' if self.capture_only else 'camera', '摄像头错误：' + str(exc))
             self.recorder.emit('event', {'kind': 'camera_error', 'error': str(exc)})
         finally:
             self.stop_event.set()

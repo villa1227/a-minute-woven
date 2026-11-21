@@ -50,6 +50,18 @@ class PupilDetector:
                 if candidates:
                     ex, ey, ew, eh = min(candidates, key=lambda e: ((e[0]+e[2]/2)/w-target)**2 + ((e[1]+e[3]/2)/h-0.28)**2)
                     self.cached_rois[side] = (x+int(ex), y+int(ey), int(ew), int(eh))
+        else:
+            # A dedicated close-up camera may contain two eyes but no full face.
+            # Search halves independently; never mirror/copy a single detection.
+            height, width = gray.shape
+            for side, start, end in (('image_left', 0, width//2), ('image_right', width//2, width)):
+                region = gray[:int(height*.85), start:end]
+                boxes = self.eye.detectMultiScale(region, 1.1, 5, minSize=(30, 20))
+                candidates = [tuple(map(int, box)) for box in boxes
+                              if .7 < box[2]/max(1,box[3]) < 3 and box[2] < region.shape[1]*.95]
+                if candidates:
+                    ex, ey, ew, eh = max(candidates, key=lambda e:e[2]*e[3])
+                    self.cached_rois[side] = (start+ex,ey,ew,eh)
         return dict(self.cached_rois)
 
     def automatic_roi(self, gray):

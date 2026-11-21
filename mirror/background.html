@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="mirror-token" content="__MIRROR_TOKEN__">
+  <link rel="icon" href="data:,">
+  <title>赛博镜子 · 背景涂绘版</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="background.css">
+  <script src="line-art-client.js" defer></script>
+  <script src="line-art-engine.js" defer></script>
+  <script src="line-preset.js" defer></script>
+  <script src="background-app.js" defer></script>
+  <script src="pen-input.js" defer></script>
+  <script src="brush-mapping.js" defer></script>
+  <script src="brush-renderer.js" defer></script>
+  <script src="background-renderer.js" defer></script>
+  <script src="background-controls.js" defer></script>
+  <script src="woven-renderer.js" defer></script>
+  <script src="woven-layer.js" defer></script>
+  <script src="devices.js" defer></script>
+  <script src="background-sensors.js" defer></script>
+  <script src="background-tracing.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <a class="wordmark" href="/background">CYBER / MIRROR</a>
+      <span class="edition">肖像实验 · 02 / 背景</span>
+    </header>
+    <nav class="version-nav" aria-label="前端版本"><a href="/" target="_blank" rel="noopener">描摹版 ↗</a><span aria-current="page">背景涂绘版</span><a href="http://127.0.0.1:8765/" target="_blank" rel="noopener">原织锦版 ↗</a><small>各页照片与笔画独立，设备连接共用。原织锦入口需原服务运行。</small></nav>
+    <section class="intro">
+      <p class="eyebrow">让线条留在上面，让反应成为底色</p>
+      <h1>在线条下面，画出你的底色。</h1>
+      <p>在镜头前停留，选择你想留下的一刻。<br>保留你的黑色轮廓，用大笔刷自由涂绘整张纸。</p>
+    </section>
+
+    <nav class="steps" aria-label="制作步骤">
+      <span id="step1" aria-current="step"><b>01</b> 留下照片</span>
+      <span id="step2"><b>02</b> 确认这一刻</span>
+      <span id="step3"><b>03</b> 生成线稿</span>
+    </nav>
+
+    <section class="input-tools" aria-label="照片输入">
+      <div class="camera-tools">
+        <label for="camera">摄像头</label>
+        <select id="camera"><option value="">默认摄像头</option></select>
+        <button id="openCamera" class="primary">打开摄像头</button>
+        <button id="closeCamera" hidden>关闭摄像头</button>
+      </div>
+      <div class="import-tools"><span>或</span><label class="file-button" for="photoFile">导入照片</label>
+        <input id="photoFile" type="file" accept="image/jpeg,image/png,image/webp">
+      </div>
+      <a class="device-shortcut" href="#sensorDevices">设置采集设备 ↓</a>
+    </section>
+    <p id="status" role="status" aria-live="polite">选择摄像头或导入照片，由你决定拍下哪一刻。</p>
+    <p id="error" role="alert" hidden></p>
+
+    <section class="workspace" aria-label="肖像与线稿">
+      <article class="panel">
+        <div class="panel-heading"><h2 id="photoHeading">你的照片</h2><span id="sourceMeta">等待取景</span></div>
+        <div class="surface photo-surface" id="photoSurface">
+          <div class="placeholder" id="photoPlaceholder"><span class="portrait-icon" aria-hidden="true"></span><p>把自己放进画面里</p><small>完整脸部 · 自然光 · 简洁背景</small></div>
+          <video id="video" autoplay muted playsinline hidden aria-label="镜像摄像头预览"></video>
+          <canvas id="photoCanvas" hidden aria-label="待确认或已确认的照片"></canvas>
+        </div>
+        <div class="photo-actions">
+          <button id="capture" class="primary" hidden disabled>拍照</button>
+          <button id="confirm" class="primary" hidden>确认使用</button>
+          <button id="retake" hidden>重拍</button>
+          <span id="mirrorNote" class="caption">照片仅在此页面内处理</span>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-heading"><h2>轮廓与底色</h2><span id="resultMeta">等待确认照片</span></div>
+        <div class="surface drawing-surface background-stage" id="drawingSurface" aria-busy="false">
+          <div class="placeholder" id="linePlaceholder"><span class="line-icon" aria-hidden="true">〰</span><p>线条将在这里浮现</p><small>确认照片后生成描摹底稿</small></div>
+          <canvas id="wovenCanvas" hidden aria-label="woven 织纹底层"></canvas>
+          <canvas id="backgroundCanvas" hidden aria-label="彩色背景笔画"></canvas>
+          <canvas id="lineCanvas" hidden aria-label="顶层透明黑色线稿"></canvas>
+          <!-- White paper, background paint, transparent black lines, then input surface. -->
+          <canvas id="tracingCanvas" hidden aria-label="手写板背景涂绘输入层"></canvas>
+          <div id="processing" hidden><span class="spinner" aria-hidden="true"></span>正在整理线条…</div>
+        </div>
+        <div class="result-actions"><button id="download" class="primary" disabled>下载线稿 PNG</button><span class="caption">只有线条与白纸</span></div>
+      </article>
+    </section>
+
+    <section class="pen-panel" aria-label="手写板输入诊断">
+      <h2>生理信号与表情的艺术映射</h2>
+      <div class="pen-actions"><label><input id="mappingEnabled" type="checkbox" checked> 数据画笔</label><button id="setBrushReference">设置个人参考</button><label><input id="reverseEda" type="checkbox"> 反转皮电方向</label><label class="feedback-control" for="feedbackStrength">反馈强度 <output id="feedbackStrengthValue">3 · 明显</output><input id="feedbackStrength" type="range" min="1" max="5" step="0.5" value="3"></label></div>
+      <p id="sensorConnection" role="status">等待数据连接</p><p id="referenceNotice" class="caption">采集约 5 秒后，设置本次个人参考。</p>
+      <p class="caption">拍照后，在下方开启采集与表情，约 5 秒后设置参考。强度越大，较小的数据变化也更明显；缺失通道不产生虚构反馈。</p>
+      <details id="sensorDevices" open><summary>设备与采集 <span id="deviceSummary">正在连接…</span></summary>
+        <div class="device-grid">
+          <section><h3>摄像头与眼区</h3><div class="pen-actions"><select id="sensorCamera" aria-label="采集摄像头"></select><label>识别 <input id="sensorEyeRate" type="number" min="1" max="60" value="20"> Hz</label><button id="sensorCameraStart">开启采集</button><button id="sensorCameraStop">停止采集</button></div><p id="deviceCameraStatus"></p><p id="deviceEyeStatus"></p>
+            <div class="pen-actions"><select id="sensorRoiSide" aria-label="框选眼区"><option value="image_left">画面左眼</option><option value="image_right">画面右眼</option></select><button id="sensorAutoRoi">双眼恢复自动</button></div>
+            <div id="sensorFrameBox"><img id="sensorFrame" hidden alt="采集预览，可拖动框选单眼" draggable="false"><div id="sensorSelection" hidden></div></div>
+            <p class="caption">自动瞳孔候选不稳定时，选择左右侧后在预览中拖动框住单眼。此预览不镜像，照片拍摄使用镜像。</p>
+            <div class="pen-actions"><label>全脸摄像头 <select id="sensorFaceCamera" aria-label="表情全脸摄像头"><option value="">共用双眼摄像头</option></select></label><button id="sensorExpressionStart">开启表情</button><button id="sensorExpressionStop">停止表情</button></div><p id="deviceExpressionStatus"></p><img id="sensorFaceFrame" hidden alt="全脸表情预览" style="max-width:100%;max-height:180px"><p class="caption">双眼近景使用上方摄像头；表情选择另一台拍完整脸部。no_eye_roi 表示未定位眼区，不是瞳孔大小为零。近景可手动分别框住两眼。</p>
+          </section>
+          <section><h3>心率与皮电</h3><div class="pen-actions"><button id="sensorHeartScan">扫描手环</button><select id="sensorHeart" aria-label="手环设备"></select><button id="sensorHeartConnect">连接心率</button><button id="sensorHeartStop">断开心率</button></div><p id="deviceHeartStatus"></p>
+            <div class="pen-actions"><button id="sensorEdaScan">刷新串口</button><select id="sensorEda" aria-label="皮电串口"></select><button id="sensorEdaConnect">连接皮电</button><button id="sensorEdaStop">断开皮电</button></div><p id="deviceEdaStatus"></p>
+            <h3>原始记录（可选）</h3><div class="pen-actions"><button id="sensorRecord">开始原始记录</button><input id="sensorMarker" value="baseline" aria-label="记录标记"><button id="sensorMarkerButton">添加标记</button></div><p id="deviceRecordStatus"></p><p class="caption">采集数据保存到原 recordings/，无需开始记录也能驱动画笔。照片和笔输入仍只留页面内存。</p>
+          </section>
+        </div><p id="deviceError" role="alert"></p>
+      </details>
+      <div class="sensor-readings"><span id="channelleft"></span><span id="channelright"></span><span id="channelheart"></span><span id="channeleda"></span><span id="channelExpression"></span></div>
+      <canvas id="brushPreview" width="320" height="50" aria-label="当前画笔预览"></canvas><p id="brushParameters" class="caption"></p>
+      <h2>背景涂绘与笔输入 · XP-Pen Deco 640</h2>
+      <div class="background-tools"><label for="backgroundDiameter">基础笔刷直径 <output id="backgroundDiameterValue">6%</output><input id="backgroundDiameter" type="range" min="2" max="16" step="0.5" value="6"></label><span id="backgroundSizeStatus">生成线稿后可绘制背景</span><label><span><input id="wovenEnabled" type="checkbox"> 加入 woven 织纹背景</span></label></div>
+      <div class="background-tools"><label for="backgroundOpacity">底色浓度 <output id="backgroundOpacityValue">40%</output><input id="backgroundOpacity" type="range" min="5" max="100" step="5" value="40"></label><span class="caption">调低会让已画背景和之后的笔画一起变淡，作品下载同步生效。</span></div>
+      <p id="wovenStatus" class="caption">开启后自动织入 60 秒数据，约 65 秒完成；缺失数据仍有基础织纹。</p>
+      <div class="pen-actions"><button id="clearTracing" disabled>清除背景</button><button id="toggleGuide" disabled>隐藏线稿</button><button id="downloadInput" disabled>下载输入 JSON</button><button id="downloadTracing" disabled>下载背景 PNG</button><button id="downloadArtwork" disabled>下载作品 PNG</button><label><input id="mouseFallback" type="checkbox" checked> 鼠标回退</label></div>
+      <p id="penContact" role="status">确认照片并生成线稿后可涂绘背景</p>
+      <dl class="pen-readings"><div><dt>输入类型</dt><dd id="penType">等待输入</dd></div><div><dt>图像坐标</dt><dd id="penPosition">—</dd></div><div><dt>浏览器笔压（0～1）</dt><dd id="penPressure">—</dd><meter id="pressureMeter" min="0" max="1" value="0" aria-label="笔压"></meter></div><div><dt>倾斜 X / Y 与旋转</dt><dd id="penTilt">—</dd></div><div><dt>最近一秒接触样本</dt><dd id="penRate">0 点/秒</dd></div><div><dt>本次记录</dt><dd id="penCount">0 点</dd></div></dl>
+      <p class="caption">仅笔尖或鼠标左键描摹，笔压保留读数，不叠加控制粗细。关闭数据画笔使用基础直径的石墨色圆笔。颜色可涂在脸部线条下，黑线不会被覆盖。若只收到鼠标事件或笔压不变化，请检查 XP-Pen 驱动的 Windows Ink 设置。重新生成线稿会清除背景与输入记录。</p>
+    </section>
+    <section id="adjustments" aria-label="线稿调整">
+      <div class="adjustment-title"><h2>让轮廓更清晰一点。</h2><p>调整底稿的细节，找到适合描摹的密度。</p></div>
+      <fieldset id="detailControls" disabled><legend>细节</legend><div class="segmented">
+        <label><input type="radio" name="detail" value="minimal"><span>极简</span></label>
+        <label><input type="radio" name="detail" value="simple"><span>简洁</span></label>
+        <label><input type="radio" name="detail" value="standard" checked><span>标准</span></label>
+        <label><input type="radio" name="detail" value="rich"><span>丰富</span></label>
+      </div></fieldset>
+      <label class="width-control" for="lineWidth">线宽 <output id="widthValue" for="lineWidth">3 px</output><input id="lineWidth" type="range" min="1" max="4" step="1" value="3" disabled></label>
+    </section>
+    <details id="tuningPanel" open>
+      <summary>手动调参 <span id="tuningStatus">标准预设</span></summary>
+      <p class="tuning-intro">同一张确认照片会随参数重新生成。想更少线条，先增加平滑与碎线过滤，再提高边缘筛选；过强时五官也可能消失。</p>
+      <fieldset id="tuningControls" disabled><legend class="sr-only">线稿底层参数</legend>
+        <div id="tuningInputs" class="tuning-grid"></div>
+        <div class="tuning-actions"><button id="resetTuning" type="button">恢复当前预设</button><button id="saveLinePreset" type="button" disabled>将当前定为预设</button><span id="savedPresetStatus" role="status" class="caption"></span><span class="caption">参数只作用于线稿，不改变原照片。</span></div>
+      </fieldset>
+    </details>
+    <footer><span>照片与输入不会上传，也不会自动保存。关闭或刷新页面后，本次内容即被清除。</span><span>数据画笔只改变新笔画，原始输入始终保留。</span></footer>
+  </main>
+</body>
+</html>

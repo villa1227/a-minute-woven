@@ -33,6 +33,7 @@ class Controller:
         self.eda_ports_error = None
         self.camera = self.heart = None
         self.expression = None
+        self.face_camera = None
         self.publisher = SamplePublisher(self.recorder, self.trace)
         self.devices = []
         self.cameras = []
@@ -102,6 +103,8 @@ class Controller:
                     'camera_alive': cam_alive, 'heart_alive': hr_alive,
                     'camera_sample': camera_sample, 'camera_age_s': camera_age,
                     'camera_metrics': camera_metrics,
+                    'face_camera_alive': bool(self.face_camera and self.face_camera.is_alive()),
+                    'face_camera_info': self.face_camera.camera_info if self.face_camera else None,
                     'expression': self.expression.snapshot() if self.expression else idle_state(),
                     'camera_fresh': bool(cam_alive and camera_age is not None and camera_age < 2),
                     'heart_sample': self.last_hr, 'heart_age_s': hr_age,
@@ -111,8 +114,8 @@ class Controller:
                     'artwork_running': self.artwork.active,
                     'path': str(self.recorder.path) if self.recorder.path else None, 'note': self.note}
 
-    def frame(self):
-        worker = self.camera
+    def frame(self, source='eyes'):
+        worker = self.face_camera if source=='face' else self.camera
         if not worker:
             return None
         return worker.preview_jpeg()
@@ -122,19 +125,36 @@ class Controller:
             if command == 'expression_start':
                 if self.recorder.active or self.artwork.active:
                     raise ValueError('请先结束创作或记录，再开启或调整表情识别')
-                if not self.camera or not self.camera.is_alive() or self.camera.stop_event.is_set():
-                    raise ValueError('请先打开摄像头')
                 if self.expression and self.expression.is_alive():
                     raise ValueError('表情识别已运行或正在停止')
                 rate = data.get('rate', 5)
                 if isinstance(rate, bool) or rate not in (1, 2, 5, 10):
                     raise ValueError('表情识别频率可选 1、2、5、10 Hz')
-                self.expression = ExpressionWorker(self.camera, self.publisher, rate)
+                index = data.get('camera_index')
+                selected = self.camera
+                if index is not None:
+                    index = int(index)
+                    if index < 0 or index not in [c['index'] for c in self.cameras]:
+                        raise ValueError('请先选择有效的全脸摄像头')
+                    if self.camera and self.camera.is_alive() and self.camera.index==index:
+                        selected = self.camera
+                    else:
+                        if self.face_camera and self.face_camera.is_alive() and self.face_camera.index!=index:
+                            raise ValueError('请先停止全脸摄像头再切换')
+                        if not self.face_camera or not self.face_camera.is_alive():
+                            self.face_camera = CameraWorker(index,cv2.CAP_DSHOW,20,self.recorder,self.status,False,capture_only=True)
+                            self.face_camera.start()
+                        selected = self.face_camera
+                if not selected or not selected.is_alive() or selected.stop_event.is_set():
+                    raise ValueError('请先打开摄像头，或选择独立全脸摄像头')
+                self.expression = ExpressionWorker(selected, self.publisher, rate)
                 self.expression.start()
                 return
             if command == 'expression_stop':
                 if self.expression:
                     self.expression.stop()
+                if self.face_camera:
+                    self.face_camera.stop_event.set()
                 return
             if command == 'eda_scan':
                 self.enumerate_eda_ports()
@@ -171,12 +191,14 @@ class Controller:
                 index, rate = int(data.get('index', 1)), float(data.get('rate', 20))
                 if index < 0 or not 1 <= rate <= 60:
                     raise ValueError('摄像头编号须为非负整数，采样率为 1–60 Hz')
+                if self.face_camera and self.face_camera.is_alive() and self.face_camera.index==index:
+                    raise ValueError('此摄像头正用于全脸表情，请选择另一台双眼摄像头')
                 self.trace.emit('event', {'kind': 'camera_reset'})
                 self.camera = CameraWorker(index, cv2.CAP_DSHOW, rate, self.recorder, self.status, bool(data.get('save_frames')), self.on_camera)
                 self.messages['camera'] = '正在打开摄像头…'
                 self.camera.start()
             elif command == 'camera_stop':
-                if self.expression:
+                if self.expression and self.expression.camera is self.camera:
                     self.expression.stop()
                 if self.camera:
                     self.camera.stop_event.set()
@@ -247,6 +269,7 @@ class Controller:
                 'eye_coordinate_system': 'unmirrored_image_left_right',
                 'save_sampled_frames': self.camera.save_frames if state['camera_fresh'] else False,
                 'ble_device': self.selected_device,
+                'face_camera': self.face_camera.camera_info if self.face_camera else None,
                 'expression': {key: state['expression'][key] for key in ('running', 'target_hz', 'model')},
                 'ble_services': getattr(self.heart, 'service_info', None),
                 'eda': {'port': state['eda']['port'], 'baudrate': 115200, 'target_hz': 20,
@@ -273,10 +296,10 @@ class Controller:
             self.expression.join(timeout=5)
         self.eda.close()
         self.artwork.close()
-        for worker in (self.camera, self.heart):
+        for worker in (self.camera, self.face_camera, self.heart):
             if worker:
                 worker.stop_event.set()
-        for worker in (self.camera, self.heart):
+        for worker in (self.camera, self.face_camera, self.heart):
             if worker and worker.is_alive():
                 worker.join(timeout=5)
         self.recorder.stop()
@@ -332,7 +355,7 @@ def main():
                     return self.send(400, b'{"error":"Invalid cursor"}')
                 return self.send(200, json.dumps(controller.trace.snapshot(after), ensure_ascii=False, allow_nan=False).encode('utf-8'))
             if path == '/api/frame':
-                frame = controller.frame()
+                frame = controller.frame(parse_qs(urlsplit(self.path).query).get('source', ['eyes'])[0])
                 return self.send(200 if frame else 204, frame or b'', 'image/jpeg')
             return self.send(404, b'{}')
 

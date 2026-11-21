@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="styles.css">
   <script src="line-art-client.js" defer></script>
   <script src="line-art-engine.js" defer></script>
+  <script src="line-preset.js" defer></script>
   <script src="app.js" defer></script>
   <script src="pen-input.js" defer></script>
   <script src="brush-mapping.js" defer></script>
@@ -24,6 +25,7 @@
       <a class="wordmark" href="./">CYBER / MIRROR</a>
       <span class="edition">肖像实验 · 01</span>
     </header>
+    <nav class="version-nav" aria-label="前端版本"><span aria-current="page">描摹版</span><a href="/background" target="_blank" rel="noopener">背景涂绘版 ↗</a><a href="http://127.0.0.1:8765/" target="_blank" rel="noopener">原织锦版 ↗</a><small>各页照片与笔画独立，设备连接共用。原织锦入口需原服务运行。</small></nav>
     <section class="intro">
       <p class="eyebrow">从一张照片，开始一次描摹</p>
       <h1>先，看见自己的轮廓。</h1>
@@ -91,7 +93,7 @@
             <div class="pen-actions"><select id="sensorRoiSide" aria-label="框选眼区"><option value="image_left">画面左眼</option><option value="image_right">画面右眼</option></select><button id="sensorAutoRoi">双眼恢复自动</button></div>
             <div id="sensorFrameBox"><img id="sensorFrame" hidden alt="采集预览，可拖动框选单眼" draggable="false"><div id="sensorSelection" hidden></div></div>
             <p class="caption">自动瞳孔候选不稳定时，选择左右侧后在预览中拖动框住单眼。此预览不镜像，照片拍摄使用镜像。</p>
-            <div class="pen-actions"><button id="sensorExpressionStart">开启表情</button><button id="sensorExpressionStop">停止表情</button></div><p id="deviceExpressionStatus"></p>
+            <div class="pen-actions"><label>全脸摄像头 <select id="sensorFaceCamera" aria-label="表情全脸摄像头"><option value="">共用双眼摄像头</option></select></label><button id="sensorExpressionStart">开启表情</button><button id="sensorExpressionStop">停止表情</button></div><p id="deviceExpressionStatus"></p><img id="sensorFaceFrame" hidden alt="全脸表情预览" style="max-width:100%;max-height:180px"><p class="caption">双眼近景使用上方摄像头；表情选择另一台拍完整脸部。no_eye_roi 表示未定位眼区，不是瞳孔大小为零。近景可手动分别框住两眼。</p>
           </section>
           <section><h3>心率与皮电</h3><div class="pen-actions"><button id="sensorHeartScan">扫描手环</button><select id="sensorHeart" aria-label="手环设备"></select><button id="sensorHeartConnect">连接心率</button><button id="sensorHeartStop">断开心率</button></div><p id="deviceHeartStatus"></p>
             <div class="pen-actions"><button id="sensorEdaScan">刷新串口</button><select id="sensorEda" aria-label="皮电串口"></select><button id="sensorEdaConnect">连接皮电</button><button id="sensorEdaStop">断开皮电</button></div><p id="deviceEdaStatus"></p>
@@ -122,7 +124,7 @@
       <p class="tuning-intro">同一张确认照片会随参数重新生成。想更少线条，先增加平滑与碎线过滤，再提高边缘筛选；过强时五官也可能消失。</p>
       <fieldset id="tuningControls" disabled><legend class="sr-only">线稿底层参数</legend>
         <div id="tuningInputs" class="tuning-grid"></div>
-        <div class="tuning-actions"><button id="resetTuning" type="button">恢复当前预设</button><span class="caption">参数只作用于线稿，不改变原照片。</span></div>
+        <div class="tuning-actions"><button id="resetTuning" type="button">恢复当前预设</button><button id="saveLinePreset" type="button" disabled>将当前定为预设</button><span id="savedPresetStatus" role="status" class="caption"></span><span class="caption">参数只作用于线稿，不改变原照片。</span></div>
       </fieldset>
     </details>
     <footer><span>照片与输入不会上传，也不会自动保存。关闭或刷新页面后，本次内容即被清除。</span><span>数据画笔只改变新笔画，原始输入始终保留。</span></footer>

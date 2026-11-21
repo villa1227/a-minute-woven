@@ -146,7 +146,9 @@ function withOrientation6(jpeg){
           return {detail,blackPixels:black,processing:document.getElementById('resultMeta').textContent};
         },detail));
       }
-      assert.ok(portraitStats.every((stat,i)=>i===0||stat.blackPixels>portraitStats[i-1].blackPixels));
+      // User-tuned standard now prioritizes strong contours; presets are not a monotonic density scale.
+      assert.ok(portraitStats.every(stat=>stat.blackPixels>0));
+      assert.ok(portraitStats.at(-1).blackPixels>portraitStats[0].blackPixels);
       await page.locator('input[value="standard"]').check();await page.waitForFunction(()=>!document.getElementById('download').disabled);
       await page.screenshot({path:path.join(out,'portrait-page.png'),fullPage:true});
     }

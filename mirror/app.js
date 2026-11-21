@@ -40,6 +40,21 @@
     customTuning=false;updateTuningStatus();
   }
   applyPreset();
+  const savedPreset=window.MirrorLinePreset?.load();
+  if(savedPreset){
+    const selected=document.querySelector('input[name="detail"][value="'+savedPreset.detail+'"]');
+    if(selected)selected.checked=true;
+    const values=LineArtEngine.resolveParameters(savedPreset);
+    for(const {key} of tuningSpecs){$(key).value=values[key];$(key+'Number').value=values[key];}
+    $('lineWidth').value=values.lineWidth;$('widthValue').textContent=values.lineWidth+' px';
+    customTuning=true;updateTuningStatus();$('savedPresetStatus').textContent='已载入本机保存的预设';
+  }
+  $('saveLinePreset').onclick=()=>{
+    const options={detail:document.querySelector('input[name="detail"]:checked').value,lineWidth:Number($('lineWidth').value),
+      tuning:Object.fromEntries(tuningSpecs.map(({key})=>[key,Number($(key).value)]))};
+    try{MirrorLinePreset.save(options);$('savedPresetStatus').textContent='已保存为本机预设，下次打开自动使用';}
+    catch(_){$('savedPresetStatus').textContent='保存失败，请检查数值范围及浏览器存储权限';}
+  };
 
   function setStatus(message){$('status').textContent=message;}
   function clearError(){$('error').textContent='';$('error').hidden=true;}
@@ -71,7 +86,7 @@
     $('confirm').hidden=!hasDraft;
     $('retake').hidden=!(hasDraft||confirmed);$('retake').textContent=sourceKind==='import'?'重新拍照':'重拍';
     $('detailControls').disabled=!confirmed;$('lineWidth').disabled=!confirmed;
-    $('tuningControls').disabled=!confirmed;
+    $('tuningControls').disabled=!confirmed;$('saveLinePreset').disabled=!confirmed;
     $('download').disabled=!result||exporting;
     const current=confirmed?3:hasDraft?2:1;
     for(let i=1;i<=3;i++)if(i===current)$('step'+i).setAttribute('aria-current','step');else $('step'+i).removeAttribute('aria-current');

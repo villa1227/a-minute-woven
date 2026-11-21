@@ -1,7 +1,7 @@
 /* Unified device controls. Reuses the collector's command and error semantics. */
 (() => {
   const $=id=>document.getElementById(id),token=document.querySelector('meta[name="mirror-token"]').content;
-  let state=null,connected=false,busy=false,photoActive=false,frameURL=null,drag=null,frameBusy=false;
+  let state=null,connected=false,busy=false,photoActive=false,frameURL=null,faceURL=null,drag=null,frameBusy=false;
   function options(id,items,key,label){
     const select=$(id),signature=JSON.stringify(items.map(item=>[item[key],label(item)]));
     if(select.dataset.signature===signature)return;
@@ -26,14 +26,19 @@
   function render(){
     const s=state||{},lock=busy||!connected,recording=s.recording||s.artwork_running;
     options('sensorCamera',s.cameras||[],'index',c=>c.index+' · '+c.name);
+    const faceSelect=$('sensorFaceCamera');
+    if(faceSelect){
+      options('sensorFaceCamera',[{index:'',name:'共用双眼摄像头'},...(s.cameras||[])],'index',c=>c.index===''?c.name:c.index+' · '+c.name);
+      faceSelect.disabled=lock||s.expression?.running||s.face_camera_alive||recording||photoActive;
+    }
     options('sensorHeart',s.devices||[],'address',d=>(d.name||'BLE')+' · '+d.address);
     options('sensorEda',s.eda_ports||[],'port',p=>p.port+' · '+p.description);
     $('sensorCameraStart').disabled=lock||s.camera_alive||recording||photoActive||!s.cameras?.length;
     $('sensorCameraStop').disabled=lock||!s.camera_alive;
     $('sensorCamera').disabled=lock||s.camera_alive||recording||photoActive;
     $('sensorEyeRate').disabled=$('sensorCamera').disabled;
-    $('sensorExpressionStart').disabled=lock||!s.camera_alive||s.expression?.running||recording;
-    $('sensorExpressionStop').disabled=lock||!s.expression?.running;
+    $('sensorExpressionStart').disabled=lock||(!s.camera_alive&&!faceSelect?.value)||s.expression?.running||recording||photoActive;
+    $('sensorExpressionStop').disabled=lock||(!s.expression?.running&&!s.face_camera_alive);
     $('sensorHeartScan').disabled=lock||s.scanning||s.heart_alive;
     $('sensorHeartConnect').disabled=lock||s.heart_alive||!s.devices?.length;
     $('sensorHeartStop').disabled=lock||!s.heart_alive;
@@ -47,7 +52,9 @@
     $('deviceSummary').textContent=!connected?'采集服务未连接':photoActive?'正在浏览器拍照 · 采集摄像头已暂停':
       `摄像头 ${s.camera_alive?'开启':'关闭'} · 表情 ${s.expression?.running?'开启':'关闭'} · 心率 ${s.heart_alive?'连接中/已连接':'未连接'} · 皮电 ${s.eda?.connected?'已连接':'未连接'}`;
     $('deviceCameraStatus').textContent=s.messages?.camera||'等待摄像头';
-    $('deviceExpressionStatus').textContent=s.expression?.error||(s.expression?.running?'表情识别中':'表情未开启');
+    $('deviceExpressionStatus').textContent=s.expression?.error||
+      (s.messages?.face_camera?.includes('错误')?s.messages.face_camera:
+      s.expression?.running?(s.face_camera_alive?'独立全脸摄像头 · 表情识别中':'共用摄像头 · 表情识别中'):'表情未开启');
     $('deviceHeartStatus').textContent=s.scanning?'蓝牙扫描中，约 8 秒…':s.messages?.heart||'心率未连接';
     $('deviceEdaStatus').textContent=s.eda_ports_error||s.eda?.status||'皮电未连接';
     const eyes=s.camera_sample?.eyes||{};
@@ -63,14 +70,17 @@
     if(packet.connected)state=packet.state;
     if(state?.recording||state?.artwork_running)throw Error('请先在本页停止记录或结束原作品，再拍照；不会中断正在保存的记录。');
     photoActive=true;render();
-    if(state?.camera_alive){
+    if(state?.face_camera_alive||state?.expression?.running){
+      try{await command('expression_stop');}catch(error){photoActive=false;render();throw error;}
+    }
+    if(state?.camera_alive||state?.face_camera_alive){
       try{
         await command('camera_stop');
         const deadline=performance.now()+7000;
         while(performance.now()<deadline){
           const response=await fetch('/api/sensors',{headers:{'X-Mirror-Token':token},signal:AbortSignal.timeout(7000)});
           const result=await response.json();
-          if(result.connected&&!result.state.camera_alive){state=result.state;render();return;}
+          if(result.connected&&!result.state.camera_alive&&!result.state.face_camera_alive){state=result.state;render();return;}
           await new Promise(resolve=>setTimeout(resolve,100));
         }
         throw Error('采集摄像头尚未释放，请稍后重试。');
@@ -80,7 +90,7 @@
   function photoEnded(){photoActive=false;render();}
   $('sensorCameraStart').onclick=()=>act('camera_start',{index:Number($('sensorCamera').value),rate:Number($('sensorEyeRate').value),save_frames:false});
   $('sensorCameraStop').onclick=()=>act('camera_stop');
-  $('sensorExpressionStart').onclick=()=>act('expression_start',{rate:5});$('sensorExpressionStop').onclick=()=>act('expression_stop');
+  $('sensorExpressionStart').onclick=()=>{const index=$('sensorFaceCamera')?.value;act('expression_start',{rate:5,...(index!==''&&index!=null?{camera_index:Number(index)}:{})});};$('sensorExpressionStop').onclick=()=>act('expression_stop');
   $('sensorHeartScan').onclick=()=>act('scan');$('sensorHeartConnect').onclick=()=>act('heart_connect',{address:$('sensorHeart').value});$('sensorHeartStop').onclick=()=>act('heart_stop');
   $('sensorEdaScan').onclick=()=>act('eda_scan');$('sensorEdaConnect').onclick=()=>act('eda_connect',{port:$('sensorEda').value});$('sensorEdaStop').onclick=()=>act('eda_stop');
   $('sensorRecord').onclick=()=>act(state?.recording?'record_stop':'record_start');
@@ -104,6 +114,13 @@
   image.onlostpointercapture=()=>{drag=null;selection.hidden=true;};
   window.addEventListener('blur',()=>{drag=null;selection.hidden=true;});
   async function preview(){
+    const faceImage=$('sensorFaceFrame');
+    if(faceImage&&!document.hidden&&$('sensorDevices').open&&state?.face_camera_alive&&!photoActive){
+      try{const r=await fetch('/api/device-frame?source=face',{headers:{'X-Mirror-Token':token},signal:AbortSignal.timeout(3000)});
+        if(r.status===200){const next=URL.createObjectURL(await r.blob()),old=faceURL;faceURL=next;faceImage.src=next;faceImage.hidden=false;if(old)URL.revokeObjectURL(old);}
+        else faceImage.hidden=true;
+      }catch(_){faceImage.hidden=true;}
+    }else if(faceImage){faceImage.hidden=true;if(faceURL){URL.revokeObjectURL(faceURL);faceURL=null;}}
     if(!frameBusy&&!document.hidden&&$('sensorDevices').open&&state?.camera_alive&&!photoActive&&!drag){
       frameBusy=true;
       try{
@@ -115,7 +132,7 @@
     }else if(!state?.camera_alive||photoActive){image.hidden=true;if(frameURL){URL.revokeObjectURL(frameURL);frameURL=null;}}
     setTimeout(preview,100);
   }
-  window.addEventListener('pagehide',()=>{if(frameURL)URL.revokeObjectURL(frameURL);});
+  window.addEventListener('pagehide',()=>{if(frameURL)URL.revokeObjectURL(frameURL);if(faceURL)URL.revokeObjectURL(faceURL);});
   window.MirrorDevices={receive(packet){connected=!!packet.connected;if(connected)state=packet.state;render();},beforePhoto,photoEnded};
   render();preview();
 })();

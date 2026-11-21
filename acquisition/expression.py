@@ -151,6 +151,7 @@ class ExpressionWorker(threading.Thread):
                 completed = stamp()
                 sample.update(frame_id=frame_id, frame_width=frame.shape[1], frame_height=frame.shape[0],
                               model_id=MODEL_ID, processing_ms=(completed['host_monotonic_ns']-begin)/1e6,
+                              camera_index=getattr(self.camera,'index',None),
                               frame_age_ms=(completed['host_monotonic_ns']-clock['host_monotonic_ns'])/1e6,
                               completed_monotonic_ns=completed['host_monotonic_ns'], completed_utc=completed['host_utc'],
                               observed_hz=None if previous is None else 1e9/(begin-previous))

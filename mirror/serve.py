@@ -17,6 +17,7 @@ COMMANDS = {'camera_start', 'camera_stop', 'roi', 'scan', 'heart_connect', 'hear
             'eda_scan', 'eda_connect', 'eda_stop', 'expression_start', 'expression_stop',
             'record_start', 'record_stop', 'marker'}
 STATE_KEYS = ('camera_alive', 'camera_fresh', 'heart_alive', 'heart_fresh', 'eda', 'expression',
+              'face_camera_alive','face_camera_info',
               'cameras', 'camera_sample', 'camera_metrics', 'devices', 'scanning', 'messages',
               'eda_ports', 'eda_ports_error', 'recording', 'artwork_running', 'counts', 'elapsed_s', 'note')
 
@@ -93,11 +94,11 @@ class Bridge:
                     exc.close()
                 raise ValueError(error) from None
 
-    def frame(self):
+    def frame(self, source='eyes'):
         with self.lock:
             if not self.token:
                 self.acquire_token()
-            request = urllib.request.Request(UPSTREAM+'/api/frame',headers={'X-Session-Token':self.token})
+            request = urllib.request.Request(UPSTREAM+'/api/frame?source='+source,headers={'X-Session-Token':self.token})
             try:
                 with self.opener.open(request,timeout=2) as response:
                     return response.read(4*1024*1024) if response.status==200 else None
@@ -123,8 +124,8 @@ class LocalBridge:
         self.controller.action(command, data)
         return {'ok':True}
 
-    def frame(self):
-        return self.controller.frame()
+    def frame(self, source='eyes'):
+        return self.controller.frame(source)
 
     def close(self):
         self.controller.close()
@@ -165,12 +166,15 @@ def make_handler(bridge, token):
             if self.headers.get('Host') not in hosts:
                 return self.send(403, b'{}')
             url = urlsplit(self.path)
-            if url.path == '/':
-                body = (ROOT / 'index.html').read_text(encoding='utf-8').replace('__MIRROR_TOKEN__', token)
+            if url.path in ('/', '/background', '/background/'):
+                page = 'index.html' if url.path=='/' else 'background.html'
+                body = (ROOT / page).read_text(encoding='utf-8').replace('__MIRROR_TOKEN__', token)
                 return self.send(200, body.encode(), 'text/html; charset=utf-8')
             if url.path[1:] in STATIC:
                 path = ROOT / url.path[1:]
                 return self.send(200, path.read_bytes(), 'text/css' if path.suffix == '.css' else 'text/javascript')
+            if url.path == '/woven-renderer.js':
+                return self.send(200,(ROOT.parent/'web'/'weave.js').read_bytes(),'text/javascript')
             if url.path not in ('/api/sensors', '/api/device-frame'):
                 return self.send(404, b'{}')
             if self.headers.get('X-Mirror-Token') != token:
@@ -180,7 +184,7 @@ def make_handler(bridge, token):
                 return self.send(403, b'{}')
             if url.path == '/api/device-frame':
                 try:
-                    frame = bridge.frame()
+                    frame = bridge.frame(parse_qs(url.query).get('source',['eyes'])[0])
                     return self.send(200 if frame else 204, frame or b'', 'image/jpeg')
                 except Exception:
                     return self.send(503, b'{}')
