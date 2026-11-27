@@ -127,8 +127,8 @@ node --test tests/test_weave.cjs tests/test_feedback.cjs
 
 “下一位参与者”重载页面并清掉照片、线稿、笔画、参考值与二维码，保留落盘的历史记录；“完成并生成二维码”把最终作品 PNG 上传 ImgLoc（默认保存约 1 年，每 IP 每小时上限 60 张），仅在参与者勾选同意后执行。流程、时效与外部服务限制见 [mirror/participants-sharing.md](mirror/participants-sharing.md)。
 
-## 第三方组件
+## 许可
 
-- OpenCV Zoo 的 YuNet 与 MobileFaceNet 模型及许可：`third_party/opencv_zoo/`。
-- qrcode-generator 1.4.4（MIT）：`mirror/vendor/`。
-- 仓库本身目前没有 LICENSE 文件。
+- 仓库自有代码以 MIT 许可发布，见 [LICENSE](LICENSE)。
+- 第三方组件保留各自的许可与署名：OpenCV Zoo 的 YuNet（MIT）与 MobileFaceNet（Apache-2.0）见 `third_party/opencv_zoo/`；qrcode-generator 1.4.4（MIT）见 `mirror/vendor/`。
+- 由 `scripts/download_expression_models.py` 下载的模型文件不在仓库内，适用其各自的上游许可（见 `models/expression/manifest.json`）。
